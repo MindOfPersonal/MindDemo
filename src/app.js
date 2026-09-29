@@ -13,6 +13,9 @@ const logger = require('./utils/logger');
 const dockerService = require('./services/dockerService');
 const discordService = require('./services/discordService');
 const discordEvents = require('./services/discordEvents');
+const { hub } = require('./services/agentHub');
+const Demo = require('./models/Demo');
+const DemoLog = require('./models/DemoLog');
 const { startWorker, stopWorker } = require('./services/cleanupWorker');
 const { csrfProtection, generateCSRFToken } = require('./middleware/csrf');
 const { authRequired, guestOnly } = require('./middleware/auth');
@@ -88,7 +91,11 @@ app.use('/api/admin', discordService.auditMiddleware(null, { onlyFailed: true })
 app.use('/api/admin', csrfProtection);
 app.use('/api/admin', adminAuthRoutes);
 app.use('/api/admin/demos', apiLimiter(), authRequired, demoRoutes);
+app.use('/api/admin/servers', authRequired, require('./routes/serverRoutes'));
 app.use('/api/session', sessionLimiter(), sessionRoutes);
+
+// Agent-facing endpoints use a bearer token, not a browser session or CSRF.
+app.use('/api/agent', require('./routes/agentApi'));
 
 app.post('/api/admin/discord/test', authRequired, (req, res) => {
   if (!discordService.isEnabled()) {
@@ -212,6 +219,32 @@ app.get('/admin/settings', authRequired, (req, res) => {
   });
 });
 
+app.get('/admin/servers', authRequired, (req, res) => {
+  res.render('admin/servers', {
+    title: 'Servers',
+    csrfToken: req.session.csrfToken,
+    username: req.session.username
+  });
+});
+
+app.get('/admin/servers/new', authRequired, (req, res) => {
+  res.render('admin/servers/new', {
+    title: 'Add Server',
+    csrfToken: req.session.csrfToken,
+    username: req.session.username,
+    controlUrl: config.APP_URL.replace(/^http/, 'ws') + '/agent/ws'
+  });
+});
+
+app.get('/admin/servers/:id', authRequired, (req, res) => {
+  res.render('admin/servers/view', {
+    title: 'Server',
+    csrfToken: req.session.csrfToken,
+    username: req.session.username,
+    serverId: req.params.id
+  });
+});
+
 app.get('/admin/system', authRequired, (req, res) => {
   res.render('admin/dashboard', { 
     title: 'System',
@@ -260,6 +293,32 @@ app.use((err, req, res, next) => {
   });
 });
 
+// React to events agents send us: reflect demo status and surface notable
+// events in the logs and on Discord.
+function handleAgentEvent(server, message) {
+  const event = message.event || message.type;
+  try {
+    if (event === 'agent.registered') {
+      discordEvents.serverStatus(server, 'online');
+    } else if (event === 'agent.disconnected') {
+      discordEvents.serverStatus(server, 'offline');
+    } else if (event === 'demo.started' && message.demo_id) {
+      Demo.updateStatus(message.demo_id, 'running').catch(() => {});
+      DemoLog.add({ demo_id: message.demo_id, level: 'info', message: `Demo started on server ${server.name}` }).catch(() => {});
+    } else if (event === 'demo.stopped' && message.demo_id) {
+      Demo.updateStatus(message.demo_id, 'stopped').catch(() => {});
+      DemoLog.add({ demo_id: message.demo_id, level: 'info', message: `Demo stopped on server ${server.name}` }).catch(() => {});
+    } else if (event === 'demo.failed') {
+      DemoLog.add({ demo_id: message.demo_id || null, level: 'error', message: `Agent error: ${message.message || event}` }).catch(() => {});
+      discordEvents.agentEvent(server, 'demo.failed', message.message);
+    } else if (event && event.startsWith('demo.')) {
+      DemoLog.add({ demo_id: message.demo_id || null, level: 'info', message: `Agent: ${event}` }).catch(() => {});
+    }
+  } catch (err) {
+    logger.debug('Agent event handler error:', err.message);
+  }
+}
+
 let server;
 let isShuttingDown = false;
 
@@ -280,6 +339,13 @@ async function startServer() {
       console.log(`MindDemo server running on http://localhost:${port}`);
       discordEvents.serverStart(port);
     });
+
+    if (config.AGENT.ENABLED) {
+      hub.onEvent = handleAgentEvent;
+      hub.attach(server);
+      hub.startMonitor(15000);
+      logger.info('Agent control plane listening on /agent/ws');
+    }
 
     process.on('SIGTERM', gracefulShutdown);
     process.on('SIGINT', gracefulShutdown);
@@ -306,6 +372,7 @@ function gracefulShutdown() {
   
   logger.info('Graceful shutdown started');
   discordEvents.serverStop('graceful shutdown');
+  hub.stopMonitor();
   stopWorker();
   
   if (server) {

@@ -1,7 +1,7 @@
 const Demo = require('../models/Demo');
 const DemoSession = require('../models/DemoSession');
 const DemoLog = require('../models/DemoLog');
-const dockerService = require('./dockerService');
+const runtime = require('./runtime');
 const discordEvents = require('./discordEvents');
 const logger = require('../utils/logger');
 const config = require('../config');
@@ -18,7 +18,7 @@ async function reapSession(session, reason) {
     });
 
     if (session.container_id) {
-      await dockerService.removeContainer(session.container_id);
+      await runtime.removeContainer(session);
     }
 
     // Mark as stopped and keep the row for history instead of deleting it,

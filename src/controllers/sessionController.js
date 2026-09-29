@@ -5,6 +5,7 @@ const DemoSession = require('../models/DemoSession');
 const DemoEnvironment = require('../models/DemoEnvironment');
 const DemoLog = require('../models/DemoLog');
 const dockerService = require('../services/dockerService');
+const runtime = require('../services/runtime');
 const discordEvents = require('../services/discordEvents');
 const logger = require('../utils/logger');
 const config = require('../config');
@@ -37,6 +38,23 @@ async function setupContainer(sessionId, demo) {
 
   const envVars = await DemoEnvironment.getEnvVarsForContainer(demo.id);
   await logStep(demo.id, sessionId, 'Environment variables loaded');
+
+  // Remote demo: build locally, push the image, and let the agent create the
+  // container. The agent owns the container/port mapping for this session.
+  if (demo.server_id) {
+    await logStep(demo.id, sessionId, 'Building demo image (install/build)...');
+    await runtime.ensureImage(demo);
+    await logStep(demo.id, sessionId, 'Demo image ready');
+    await logStep(demo.id, sessionId, 'Starting container on remote agent...');
+    const started = await runtime.startContainer({ demo, envVars, createdBy: 'session' });
+    await DemoSession.updateContainerInfo(sessionId, {
+      container_id: started.containerId,
+      container_port: started.containerPort
+    });
+    await logStep(demo.id, sessionId, `Container started on agent (ID: ${String(started.containerId).substring(0, 12)}, port: ${started.containerPort})`);
+    discordEvents.sessionCreated(demo, { id: sessionId }, { containerId: started.containerId, containerPort: started.containerPort });
+    return { containerId: started.containerId, containerPort: started.containerPort };
+  }
 
   // Build (or reuse) the Docker image once per demo. This runs the project's
   // install/build commands, which previously were written into an unused
@@ -132,7 +150,8 @@ async function doCreateSession(demoId, visitorToken) {
       demo_id: demo.id,
       session_token: sessionToken,
       container_id: null,
-      container_port: null
+      container_port: null,
+      server_id: demo.server_id || null
     });
 
     const { containerId, containerPort } = await setupContainer(sessionId, demo);
@@ -175,7 +194,8 @@ async function prepareSession(demoId) {
       demo_id: demo.id,
       session_token: sessionToken,
       container_id: null,
-      container_port: null
+      container_port: null,
+      server_id: demo.server_id || null
     });
 
     void (async () => {
@@ -247,7 +267,7 @@ async function endSession(req, res) {
     }
 
     await DemoSession.end(session.id);
-    await dockerService.removeContainer(session.container_id);
+    await runtime.removeContainer(session);
 
     // Clear the demo cookie and, when this was the last active session, mark
     // the demo as stopped so the landing/admin UI offer "Start" again.
@@ -315,12 +335,12 @@ async function getContainerLogs(req, res) {
       return res.json({ logs: '', ready: false });
     }
 
-    const isRunning = await dockerService.isContainerRunning(session.container_id);
+    const isRunning = await runtime.isContainerRunning(session);
     if (!isRunning) {
       return res.json({ logs: '', ready: false, containerStopped: true });
     }
 
-    const logs = await dockerService.getContainerLogs(session.container_id);
+    const logs = await runtime.getContainerLogs(session);
     res.json({ logs, ready: true });
   } catch (err) {
     logger.error('Get container logs error:', err);
@@ -365,13 +385,16 @@ async function checkSessionHealth(req, res) {
       return res.json({ healthy: false, ready: false, status: session.status });
     }
 
-    const isRunning = await dockerService.isContainerRunning(session.container_id);
+    const isRunning = await runtime.isContainerRunning(session);
     if (!isRunning) {
       return res.json({ healthy: false, ready: false, status: session.status, containerStopped: true });
     }
 
-    const targetUrl = `http://127.0.0.1:${session.container_port}`;
-    const healthy = await httpTimeout(targetUrl, 3000);
+    // Remote containers are considered healthy once the agent confirms the
+    // mapping; a direct HTTP probe would add an extra network hop.
+    const healthy = session.server_id
+      ? true
+      : await httpTimeout(`http://127.0.0.1:${session.container_port}`, 3000);
 
     if (healthy) {
       const recentLogs = await DemoLog.getBySessionId(session.id, 20);

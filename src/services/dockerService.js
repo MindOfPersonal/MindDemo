@@ -154,6 +154,12 @@ async function ensureImage(demo) {
   return tag;
 }
 
+// Returns a readable tar stream of a local image (used to push to an agent).
+async function getImageStream(tag) {
+  if (!docker) throw new Error('Docker not available');
+  return docker.getImage(tag).get();
+}
+
 async function removeImage(demoId) {
   if (!docker) return;
   try {
@@ -416,6 +422,7 @@ module.exports = {
   isAvailable,
   buildImage,
   ensureImage,
+  getImageStream,
   removeImage,
   createContainer,
   removeContainer,

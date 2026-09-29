@@ -28,6 +28,13 @@ module.exports = {
   DEMO_MAX_SESSIONS: parseInt(process.env.DEMO_MAX_SESSIONS || '10'),
   DEMO_SESSION_GRACE_SECONDS: parseInt(process.env.DEMO_SESSION_GRACE_SECONDS || '60'),
   DOCKER_SOCKET: process.env.DOCKER_SOCKET || '/var/run/docker.sock',
+  AGENT: {
+    ENABLED: process.env.AGENT_ENABLED !== 'false',
+    COMMAND_TIMEOUT_MS: parseInt(process.env.AGENT_COMMAND_TIMEOUT_MS || '60000'),
+    IMAGE_PUSH_MAX_MB: parseInt(process.env.AGENT_IMAGE_PUSH_MAX_MB || '2000'),
+    RELEASE_URL: process.env.AGENT_RELEASE_URL || 'https://get.minddevelopment.nl/agent',
+    OFFLINE_AFTER_SECONDS: parseInt(process.env.AGENT_OFFLINE_AFTER_SECONDS || '45')
+  },
   DISCORD: {
     // The webhook is only active when a URL is configured and it is not
     // explicitly disabled. `DISCORD_WEBHOOK_ENABLED=false` mutes all output

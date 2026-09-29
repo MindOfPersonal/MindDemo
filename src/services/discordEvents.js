@@ -305,6 +305,49 @@ const events = {
     });
   },
 
+  // ---- Agent servers -----------------------------------------------------
+  serverAdded(req, server) {
+    discord.event('server.add', {
+      title: 'Server toegevoegd',
+      color: 'success',
+      fields: [
+        { name: 'Server', value: server.name, inline: true },
+        { name: 'Control URL', value: server.control_url || '-', inline: false },
+        { name: 'Door', value: (req && req.session && req.session.username) || 'admin', inline: true }
+      ]
+    });
+  },
+
+  serverRemoved(req, server) {
+    discord.event('server.remove', {
+      title: 'Server verwijderd',
+      color: 'error',
+      fields: [
+        { name: 'Server', value: server.name, inline: true },
+        { name: 'Door', value: (req && req.session && req.session.username) || 'admin', inline: true }
+      ]
+    });
+  },
+
+  serverStatus(server, status) {
+    discord.event(`server.${status}`, {
+      title: `Server ${status}`,
+      color: status === 'online' ? 'success' : (status === 'degraded' ? 'warning' : 'muted'),
+      fields: [{ name: 'Server', value: server.name || server.id, inline: true }]
+    });
+  },
+
+  agentEvent(server, event, detail) {
+    discord.event('agent.' + event, {
+      title: `Agent event: ${event}`,
+      color: /fail|error/i.test(event) ? 'error' : 'info',
+      fields: [
+        { name: 'Server', value: server.name || server.id, inline: true },
+        detail ? { name: 'Detail', value: detail, inline: false } : null
+      ].filter(Boolean)
+    });
+  },
+
   test(req) {
     discord.event('test', {
       title: 'Discord webhook test',

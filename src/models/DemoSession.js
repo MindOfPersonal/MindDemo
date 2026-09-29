@@ -3,10 +3,13 @@ const logger = require('../utils/logger');
 
 class DemoSession {
   static async create(data) {
-    const { demo_id, session_token, container_id, container_port } = data;
+    const { demo_id, session_token, container_id, container_port, server_id, agent_command_id } = data;
     const result = await db.query(
-      'INSERT INTO demo_sessions (demo_id, session_token, container_id, container_port, status) VALUES (?, ?, ?, ?, "active")',
-      [demo_id, session_token, container_id, container_port]
+      `INSERT INTO demo_sessions
+         (demo_id, session_token, container_id, container_port, server_id, agent_command_id, status)
+       VALUES (?, ?, ?, ?, ?, ?, "active")`,
+      [demo_id, session_token, container_id || null, container_port || null,
+       server_id || null, agent_command_id || null]
     );
     return result.insertId;
   }

@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Servers - MindDemo</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="icon" type="image/png" href="/img/favicon.png">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body class="admin-page">
+    <input type="checkbox" id="navToggle" class="nav-toggle" hidden>
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <a href="/admin/dashboard" class="logo"><img src="/img/logo.png" alt="MindDevelopment logo" class="logo-img"><span>MindDemo</span></a>
+        </div>
+        <nav class="sidebar-nav">
+            <a href="/admin/dashboard" class="nav-link">Dashboard</a>
+            <div class="nav-group">
+                <span class="nav-label">Demos</span>
+                <a href="/admin/demos" class="nav-link">All Demos</a>
+                <a href="/admin/demos/create" class="nav-link">Create Demo</a>
+            </div>
+            <a href="/admin/servers" class="nav-link active">Servers</a>
+            <a href="/admin/logs" class="nav-link">Logs</a>
+            <a href="/admin/settings" class="nav-link">Settings</a>
+            <a href="/api/admin/logout" class="nav-link logout">Logout</a>
+        </nav>
+    </div>
+    <main class="main-content">
+        <header class="top-bar">
+            <label class="menu-btn" for="navToggle" aria-label="Toggle navigation">☰</label>
+            <div class="user-info"><span>Admin: <%= username || 'Admin' %></span></div>
+        </header>
+        <div class="card">
+            <div class="card-head">
+                <h2 style="margin:0;font-size:20px;">Servers</h2>
+                <a href="/admin/servers/new" class="btn btn-primary btn-sm">+ Add Server</a>
+            </div>
+            <div id="serversContainer"><p class="muted">Loading&hellip;</p></div>
+        </div>
+    </main>
+    <script>
+        const CSRF = <%- safeJson(csrfToken) %>;
+        function esc(s){const d=document.createElement('div');d.textContent=s==null?'':s;return d.innerHTML;}
+        function statusClass(s){return ['online','offline','updating','error','degraded','maintenance'].includes(s)?s:'unknown';}
+        async function loadServers(){
+            const box=document.getElementById('serversContainer');
+            try{
+                const res=await fetch('/api/admin/servers',{credentials:'include'});
+                const servers=await res.json();
+                if(!Array.isArray(servers)||!servers.length){box.innerHTML='<p class="muted">No servers yet. Add one to run demos on an external machine.</p>';return;}
+                box.innerHTML='<div class="table-wrap"><table class="data-table"><thead><tr><th>Name</th><th>Status</th><th>Agent</th><th>Demos</th><th>Last seen</th><th></th></tr></thead><tbody>'+
+                    servers.map(s=>'<tr>'+
+                        '<td><a href="/admin/servers/'+s.id+'">'+esc(s.name)+'</a><div class="muted">'+esc(s.control_url||'')+'</div></td>'+
+                        '<td><span class="status-badge status-'+statusClass(s.status)+'">'+esc(s.status)+'</span>'+(s.connected?' <span class="dot ok"></span>':'')+'</td>'+
+                        '<td>'+esc(s.agent_version||'-')+'</td>'+
+                        '<td>'+esc(s.demo_count)+'</td>'+
+                        '<td>'+esc(s.last_seen?new Date(s.last_seen).toLocaleString():'-')+'</td>'+
+                        '<td class="row-actions"><a class="btn btn-sm btn-secondary" href="/admin/servers/'+s.id+'">View</a> '+
+                        '<button class="btn btn-sm btn-outline" onclick="testServer('+s.id+')">Test</button> '+
+                        '<button class="btn btn-sm btn-danger" onclick="removeServer('+s.id+',\''+esc(s.name).replace(/'/g,"\\'")+'\')">Delete</button></td>'+
+                    '</tr>').join('')+'</tbody></table></div>';
+            }catch(e){box.innerHTML='<p class="muted">Failed to load servers.</p>';}
+        }
+        async function testServer(id){
+            const res=await fetch('/api/admin/servers/'+id+'/test',{method:'POST',headers:{'X-CSRF-Token':CSRF},credentials:'include'});
+            const data=await res.json().catch(()=>({}));
+            alert(res.ok?'Agent responded: OK':(data.error||'Test failed'));
+        }
+        async function removeServer(id,name){
+            if(!confirm('Remove server "'+name+'"? Running demos on it are not stopped automatically.'))return;
+            const res=await fetch('/api/admin/servers/'+id,{method:'DELETE',headers:{'X-CSRF-Token':CSRF},credentials:'include'});
+            if(res.ok)loadServers();else alert('Failed to remove server');
+        }
+        loadServers();
+        setInterval(loadServers,15000);
+    </script>
+</body>
+</html>

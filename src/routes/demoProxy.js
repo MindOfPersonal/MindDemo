@@ -1,11 +1,12 @@
 const express = require('express');
 const http = require('http');
+const https = require('https');
 const httpProxy = require('http-proxy');
 const { v4: uuidv4 } = require('uuid');
 const Demo = require('../models/Demo');
 const DemoSession = require('../models/DemoSession');
 const { createSession } = require('../controllers/sessionController');
-const dockerService = require('../services/dockerService');
+const runtime = require('../services/runtime');
 const logger = require('../utils/logger');
 
 const router = express.Router({ mergeParams: true });
@@ -15,10 +16,11 @@ const router = express.Router({ mergeParams: true });
 // (any status), so proxy.web only fires against a truly healthy target.
 function waitForHealth(targetUrl, timeoutMs) {
   const start = Date.now();
+  const transport = String(targetUrl).startsWith('https:') ? https : http;
   return new Promise((resolve) => {
     function attempt() {
       if (Date.now() - start >= timeoutMs) return resolve(false);
-      const req = http.get(targetUrl, (res) => {
+      const req = transport.get(targetUrl, (res) => {
         res.resume();
         resolve(true);
       });
@@ -178,7 +180,7 @@ router.all('/*', async (req, res) => {
           await new Promise(r => setTimeout(r, 1000));
           waited += 1000;
           session = await DemoSession.findByToken(sessionToken);
-          if (session && session.container_id && await dockerService.isContainerRunning(session.container_id)) {
+          if (session && session.container_id && await runtime.isContainerRunning(session)) {
             await DemoSession.updateActivity(session.id);
             break;
           }
@@ -187,11 +189,11 @@ router.all('/*', async (req, res) => {
             break;
           }
         }
-        if (!session || !session.container_id || !(await dockerService.isContainerRunning(session.container_id))) {
+        if (!session || !session.container_id || !(await runtime.isContainerRunning(session))) {
           if (session) await DemoSession.end(session.id);
           session = null;
         }
-      } else if (await dockerService.isContainerRunning(session.container_id)) {
+      } else if (await runtime.isContainerRunning(session)) {
         await DemoSession.updateActivity(session.id);
       } else {
         // The container is gone (crashed / stopped / idle-reaped) but the
@@ -222,8 +224,7 @@ router.all('/*', async (req, res) => {
       httpOnly: true
     });
 
-    const containerPort = session.container_port;
-    const target = `http://127.0.0.1:${containerPort}`;
+    const target = await runtime.proxyTarget(session, demo);
 
     // Ruime marge: een koude container (Docker start + app-boot + eventuele
     // demo-baseline-reset) kan op een drukke host 10-20s duren. De oude 8s

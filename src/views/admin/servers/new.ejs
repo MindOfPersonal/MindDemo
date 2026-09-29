@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Add Server - MindDemo</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="icon" type="image/png" href="/img/favicon.png">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body class="admin-page">
+    <input type="checkbox" id="navToggle" class="nav-toggle" hidden>
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <a href="/admin/dashboard" class="logo"><img src="/img/logo.png" alt="MindDevelopment logo" class="logo-img"><span>MindDemo</span></a>
+        </div>
+        <nav class="sidebar-nav">
+            <a href="/admin/dashboard" class="nav-link">Dashboard</a>
+            <div class="nav-group">
+                <span class="nav-label">Demos</span>
+                <a href="/admin/demos" class="nav-link">All Demos</a>
+                <a href="/admin/demos/create" class="nav-link">Create Demo</a>
+            </div>
+            <a href="/admin/servers" class="nav-link active">Servers</a>
+            <a href="/admin/logs" class="nav-link">Logs</a>
+            <a href="/admin/settings" class="nav-link">Settings</a>
+            <a href="/api/admin/logout" class="nav-link logout">Logout</a>
+        </nav>
+    </div>
+    <main class="main-content">
+        <header class="top-bar">
+            <label class="menu-btn" for="navToggle" aria-label="Toggle navigation">☰</label>
+            <div class="user-info"><span>Admin: <%= username || 'Admin' %></span></div>
+        </header>
+        <div class="card">
+            <div class="card-head">
+                <h2 style="margin:0;font-size:20px;">Add Server</h2>
+                <a href="/admin/servers" class="btn btn-sm btn-secondary">&larr; Back to servers</a>
+            </div>
+
+            <form id="serverForm" class="form">
+                <div class="form-group"><label for="name">Name</label><input id="name" name="name" required placeholder="mind-2"></div>
+                <div class="form-group"><label for="server_url">Server URL</label><input id="server_url" name="server_url" placeholder="https://agent-2.minddevelopment.nl"></div>
+                <div class="form-group"><label for="control_url">Control URL</label><input id="control_url" name="control_url" value="<%= controlUrl %>"></div>
+                <div class="form-group"><label for="notes">Notes</label><textarea id="notes" name="notes" rows="3"></textarea></div>
+                <button type="submit" class="btn btn-primary">Create server</button>
+            </form>
+
+            <div id="tokenBox" style="display:none;margin-top:24px;">
+                <div class="banner" style="border-color:var(--warning);">
+                    <strong>Agent token (shown once):</strong>
+                    <div style="margin-top:8px;"><code id="tokenValue" style="word-break:break-all;"></code></div>
+                    <p class="muted" style="margin-top:8px;">Store it now. MindDemo keeps only a hash and cannot show it again.</p>
+                </div>
+                <h3 style="margin:16px 0 8px;">Install on the server</h3>
+                <pre class="code-block" id="installBlock"></pre>
+                <a class="btn btn-sm btn-secondary" id="goToServer" href="#">Open server</a>
+            </div>
+        </div>
+    </main>
+    <script>
+        const CSRF = <%- safeJson(csrfToken) %>;
+        document.getElementById('serverForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const body = Object.fromEntries(new FormData(e.target).entries());
+            const res = await fetch('/api/admin/servers', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
+                credentials: 'include',
+                body: JSON.stringify(body)
+            });
+            const data = await res.json();
+            if (!res.ok) { alert(data.error || 'Failed to create server'); return; }
+            document.getElementById('tokenValue').textContent = data.token;
+            document.getElementById('installBlock').textContent =
+                'curl -fsSL https://get.minddevelopment.nl/agent/install.sh -o install.sh\n' +
+                'less install.sh\n' +
+                'sudo bash install.sh --control ' + (body.control_url || '') + ' --token ' + data.token + ' --yes';
+            document.getElementById('goToServer').href = '/admin/servers/' + data.server.id;
+            document.getElementById('tokenBox').style.display = '';
+            document.getElementById('serverForm').style.display = 'none';
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Server - MindDemo</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="icon" type="image/png" href="/img/favicon.png">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body class="admin-page">
+    <input type="checkbox" id="navToggle" class="nav-toggle" hidden>
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <a href="/admin/dashboard" class="logo"><img src="/img/logo.png" alt="MindDevelopment logo" class="logo-img"><span>MindDemo</span></a>
+        </div>
+        <nav class="sidebar-nav">
+            <a href="/admin/dashboard" class="nav-link">Dashboard</a>
+            <div class="nav-group">
+                <span class="nav-label">Demos</span>
+                <a href="/admin/demos" class="nav-link">All Demos</a>
+                <a href="/admin/demos/create" class="nav-link">Create Demo</a>
+            </div>
+            <a href="/admin/servers" class="nav-link active">Servers</a>
+            <a href="/admin/logs" class="nav-link">Logs</a>
+            <a href="/admin/settings" class="nav-link">Settings</a>
+            <a href="/api/admin/logout" class="nav-link logout">Logout</a>
+        </nav>
+    </div>
+    <main class="main-content">
+        <header class="top-bar">
+            <label class="menu-btn" for="navToggle" aria-label="Toggle navigation">☰</label>
+            <div class="user-info"><span>Admin: <%= username || 'Admin' %></span></div>
+        </header>
+
+        <div class="card">
+            <div class="card-head">
+                <h2 id="serverName" style="margin:0;font-size:20px;">Server</h2>
+                <div class="toolbar">
+                    <button class="btn btn-sm btn-outline" onclick="testServer()">Test</button>
+                    <button class="btn btn-sm btn-danger" onclick="removeServer()">Delete</button>
+                    <a href="/admin/servers" class="btn btn-sm btn-secondary">&larr; Back</a>
+                </div>
+            </div>
+            <div class="stat-grid">
+                <div class="stat"><span class="stat-label">Status</span><span class="stat-value" id="serverStatus">-</span></div>
+                <div class="stat"><span class="stat-label">Agent</span><span class="stat-value" id="agentVersion">-</span></div>
+                <div class="stat"><span class="stat-label">Docker</span><span class="stat-value" id="dockerVersion">-</span></div>
+                <div class="stat"><span class="stat-label">Last seen</span><span class="stat-value" id="lastSeen">-</span></div>
+            </div>
+            <p class="muted" id="controlUrl" style="margin-top:12px;"></p>
+        </div>
+
+        <div class="card" style="margin-top:16px;">
+            <h3>Resources</h3>
+            <div class="stat-grid" id="metricsBox" style="margin-top:12px;"><p class="muted">Loading&hellip;</p></div>
+        </div>
+
+        <div class="card" style="margin-top:16px;">
+            <h3>Demos on this server</h3>
+            <div id="demosBox" style="margin-top:12px;"><p class="muted">Loading&hellip;</p></div>
+        </div>
+
+        <div class="card" style="margin-top:16px;">
+            <h3>Recent commands</h3>
+            <div id="commandsBox" class="logs-list" style="margin-top:12px;"><p class="muted">Loading&hellip;</p></div>
+        </div>
+    </main>
+    <script>
+        const CSRF = <%- safeJson(csrfToken) %>;
+        const serverId = <%- safeJson(String(serverId)) %>;
+        function esc(s){const d=document.createElement('div');d.textContent=s==null?'':s;return d.innerHTML;}
+        function fmtBytesMb(mb){return mb?mb+' MB':'-';}
+        function statusClass(s){return ['online','offline','updating','error','degraded','maintenance'].includes(s)?s:'unknown';}
+
+        async function load(){
+            const res = await fetch('/api/admin/servers/'+serverId,{credentials:'include'});
+            if(!res.ok){document.getElementById('serverName').textContent='Server not found';return;}
+            const data = await res.json();
+            const s = data.server;
+            document.getElementById('serverName').textContent = s.name;
+            document.getElementById('serverStatus').innerHTML = '<span class="status-badge status-'+statusClass(s.status)+'">'+esc(s.status)+'</span>'+(s.connected?' <span class="dot ok"></span>':'');
+            document.getElementById('agentVersion').textContent = s.agent_version||'-';
+            document.getElementById('dockerVersion').textContent = s.docker_version||'-';
+            document.getElementById('lastSeen').textContent = s.last_seen?new Date(s.last_seen).toLocaleString():'-';
+            document.getElementById('controlUrl').textContent = 'Control URL: '+(s.control_url||'-');
+
+            const m = (data.metrics&&data.metrics[0])||null;
+            document.getElementById('metricsBox').innerHTML = m ?
+                '<div class="stat"><span class="stat-label">CPU</span><span class="stat-value">'+esc(m.cpu_percent||0)+'% / '+esc(m.cpu_cores||0)+' cores</span></div>'+
+                '<div class="stat"><span class="stat-label">Memory</span><span class="stat-value">'+fmtBytesMb(m.memory_used_mb)+' / '+fmtBytesMb(m.memory_total_mb)+'</span></div>'+
+                '<div class="stat"><span class="stat-label">Disk</span><span class="stat-value">'+esc(m.disk_used_gb||0)+' / '+esc(m.disk_total_gb||0)+' GB</span></div>'+
+                '<div class="stat"><span class="stat-label">Demos</span><span class="stat-value">'+esc(m.running_demos||0)+' running · '+esc(m.free_slots||0)+' free</span></div>'
+                : '<p class="muted">No metrics yet.</p>';
+
+            document.getElementById('demosBox').innerHTML = (data.demos&&data.demos.length) ?
+                '<div class="table-wrap"><table class="data-table"><thead><tr><th>Name</th><th>Slug</th><th>Status</th></tr></thead><tbody>'+
+                data.demos.map(d=>'<tr><td><a href="/admin/demos/'+d.id+'">'+esc(d.name)+'</a></td><td><code>'+esc(d.slug)+'</code></td><td><span class="status-badge status-'+esc(d.status)+'">'+esc(d.status)+'</span></td></tr>').join('')+
+                '</tbody></table></div>'
+                : '<p class="muted">No demos assigned to this server.</p>';
+
+            document.getElementById('commandsBox').innerHTML = (data.commands&&data.commands.length) ?
+                data.commands.map(c=>'<div class="log-row log-'+(c.status==='failed'?'error':(c.status==='done'?'info':'warn'))+'">'+
+                    '<span class="log-time">'+esc(new Date(c.created_at).toLocaleTimeString())+'</span>'+
+                    '<span class="log-level">'+esc(c.status)+'</span>'+
+                    '<span class="log-msg">'+esc(c.type)+' '+esc(c.error_message||'')+'</span></div>').join('')
+                : '<p class="muted">No commands yet.</p>';
+        }
+
+        async function testServer(){
+            const res=await fetch('/api/admin/servers/'+serverId+'/test',{method:'POST',headers:{'X-CSRF-Token':CSRF},credentials:'include'});
+            const data=await res.json().catch(()=>({}));
+            alert(res.ok?'Agent responded: OK':(data.error||'Test failed'));
+        }
+        async function removeServer(){
+            if(!confirm('Remove this server? Running demos are not stopped automatically.'))return;
+            const res=await fetch('/api/admin/servers/'+serverId,{method:'DELETE',headers:{'X-CSRF-Token':CSRF},credentials:'include'});
+            if(res.ok)window.location.href='/admin/servers';else alert('Failed to remove server');
+        }
+        load();
+        setInterval(load,10000);
+    </script>
+</body>
+</html>

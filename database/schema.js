@@ -16,6 +16,58 @@ CREATE TABLE IF NOT EXISTS \`admins\` (
   PRIMARY KEY (\`id\`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS \`servers\` (
+  \`id\` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  \`name\` VARCHAR(128) NOT NULL,
+  \`server_url\` VARCHAR(255),
+  \`control_url\` VARCHAR(255),
+  \`token_hash\` CHAR(64) NOT NULL,
+  \`status\` ENUM('unknown','online','offline','updating','error','maintenance','degraded') DEFAULT 'unknown',
+  \`agent_version\` VARCHAR(32),
+  \`docker_version\` VARCHAR(32),
+  \`last_seen\` TIMESTAMP NULL,
+  \`is_pinned\` TINYINT(1) DEFAULT 0,
+  \`allow_failover\` TINYINT(1) DEFAULT 0,
+  \`notes\` TEXT,
+  \`created_at\` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (\`id\`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS \`agent_commands\` (
+  \`id\` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  \`server_id\` INT UNSIGNED NOT NULL,
+  \`command_id\` VARCHAR(64) NOT NULL UNIQUE,
+  \`type\` VARCHAR(64) NOT NULL,
+  \`payload\` JSON,
+  \`status\` ENUM('pending','sent','done','failed','timeout') DEFAULT 'pending',
+  \`result\` JSON,
+  \`error_code\` VARCHAR(64),
+  \`error_message\` TEXT,
+  \`created_at\` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  \`started_at\` TIMESTAMP NULL,
+  \`completed_at\` TIMESTAMP NULL,
+  \`created_by\` VARCHAR(64),
+  INDEX \`idx_agent_commands_server\` (\`server_id\`, \`created_at\`),
+  PRIMARY KEY (\`id\`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS \`server_metrics\` (
+  \`id\` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  \`server_id\` INT UNSIGNED NOT NULL,
+  \`cpu_percent\` DECIMAL(5,2),
+  \`cpu_cores\` INT UNSIGNED,
+  \`load_avg_1\` DECIMAL(6,2),
+  \`memory_total_mb\` INT UNSIGNED,
+  \`memory_used_mb\` INT UNSIGNED,
+  \`disk_total_gb\` INT UNSIGNED,
+  \`disk_used_gb\` INT UNSIGNED,
+  \`running_demos\` INT UNSIGNED,
+  \`free_slots\` INT UNSIGNED,
+  \`recorded_at\` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX \`idx_server_metrics\` (\`server_id\`, \`recorded_at\`),
+  PRIMARY KEY (\`id\`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS \`demos\` (
   \`id\` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   \`name\` VARCHAR(128) NOT NULL,
@@ -23,6 +75,7 @@ CREATE TABLE IF NOT EXISTS \`demos\` (
   \`description\` TEXT,
   \`project_path\` VARCHAR(512),
   \`baseline_path\` VARCHAR(512),
+  \`server_id\` INT UNSIGNED NULL,
   \`status\` ENUM('stopped', 'running', 'building', 'error') DEFAULT 'stopped',
   \`start_command\` VARCHAR(255),
   \`install_command\` VARCHAR(255),
@@ -51,6 +104,8 @@ CREATE TABLE IF NOT EXISTS \`demo_sessions\` (
   \`session_token\` VARCHAR(128) NOT NULL UNIQUE,
   \`container_id\` VARCHAR(128),
   \`container_port\` INT UNSIGNED,
+  \`server_id\` INT UNSIGNED NULL,
+  \`agent_command_id\` VARCHAR(64) NULL,
   \`status\` ENUM('active', 'inactive', 'ending', 'stopped') DEFAULT 'active',
   \`started_at\` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   \`last_activity\` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -106,6 +161,32 @@ CREATE TABLE IF NOT EXISTS \`demo_visitors\` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 `;
 
+// Additive migrations for existing installations. `CREATE TABLE IF NOT EXISTS`
+// never adds columns to a table that already exists, so new columns are applied
+// explicitly here. Each change is checked against information_schema first, so
+// running this repeatedly is safe.
+async function columnExists(table, column) {
+  const rows = await db.query(
+    `SELECT COUNT(*) AS count FROM information_schema.columns
+     WHERE table_schema = ? AND table_name = ? AND column_name = ?`,
+    [process.env.DB_NAME, table, column]
+  );
+  return rows[0].count > 0;
+}
+
+async function addColumnIfMissing(table, column, definition) {
+  if (await columnExists(table, column)) return false;
+  await db.query(`ALTER TABLE \`${table}\` ADD COLUMN \`${column}\` ${definition}`);
+  logger.info(`Migration: added ${table}.${column}`);
+  return true;
+}
+
+async function migrate() {
+  await addColumnIfMissing('demos', 'server_id', 'INT UNSIGNED NULL');
+  await addColumnIfMissing('demo_sessions', 'server_id', 'INT UNSIGNED NULL');
+  await addColumnIfMissing('demo_sessions', 'agent_command_id', 'VARCHAR(64) NULL');
+}
+
 async function initialize() {
   try {
     const statements = schema.split(';').filter(s => s.trim());
@@ -114,6 +195,7 @@ async function initialize() {
         await db.query(stmt.trim());
       }
     }
+    await migrate();
     logger.info('Database initialized successfully');
   } catch (err) {
     logger.error('Database initialization failed:', err.message);
