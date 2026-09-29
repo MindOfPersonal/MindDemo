@@ -143,9 +143,14 @@ async function installScript(req, res) {
     const token = (req.body && req.body.token) || '<AGENT_TOKEN>';
     const controlUrl = (req.body && req.body.control_url) || `${require('../config').APP_URL.replace(/^http/, 'ws')}/agent/ws`;
     const script = [
-      '# Run as root on the target server',
-      'curl -fsSL https://get.minddevelopment.nl/agent/install.sh -o install.sh',
-      'less install.sh',
+      '# Run these commands as root on the target server.',
+      '# 1) Get the agent code onto the server (pick one):',
+      '#    git clone https://github.com/MindOfPersonal/MindDemo-agent.git /tmp/minddemo-agent',
+      '#    # or copy the folder from the MindDemo host:',
+      '#    scp -r /root/projecten/Dev/MindDemo-agent root@<server>:/tmp/minddemo-agent',
+      '',
+      '# 2) Run the installer (it installs Node and Docker if missing):',
+      'cd /tmp/minddemo-agent',
       `sudo bash install.sh --control ${controlUrl} --token ${token} --yes`
     ].join('\n');
     res.type('text/plain').send(script);
