@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Demo - MindDemo</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body class="admin-page">
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <span class="logo">MindDemo</span>
+        </div>
+        <nav class="sidebar-nav">
+            <a href="/admin/dashboard" class="nav-link">Dashboard</a>
+            <div class="nav-group">
+                <span class="nav-label">Demos</span>
+                <a href="/admin/demos" class="nav-link">All Demos</a>
+                <a href="/admin/demos/create" class="nav-link">Create Demo</a>
+            </div>
+            <a href="/admin/logs" class="nav-link">Logs</a>
+            <a href="/admin/settings" class="nav-link">Settings</a>
+            <a href="/api/admin/logout" class="nav-link logout">Logout</a>
+        </nav>
+    </div>
+    <main class="main-content">
+        <header class="top-bar">
+            <div class="user-info">
+                <span>Admin: Admin</span>
+            </div>
+        </header>
+        <div class="card">
+            <h2 id="demo-name">Demo</h2>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px;">
+                <span class="status-badge status-stopped" id="demo-status">STATUS</span>
+                <span class="tag tag-blue" id="demo-session-count">Sessions: 0</span>
+            </div>
+            <div class="banner">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <strong>Demo URL:</strong> <span id="demo-url">/</span>
+                    </div>
+                    <button class="btn btn-sm btn-secondary" onclick="copyUrl()">Copy URL</button>
+                </div>
+            </div>
+            <div style="margin-top: 16px;">
+                <p><strong>Created:</strong> <span id="demo-created">-</span></p>
+                <p><strong>Last Activity:</strong> <span id="demo-activity">-</span></p>
+                <p><strong>Timeout:</strong> <span id="demo-timeout">-</span> minutes</p>
+            </div>
+            <div style="margin-top: 24px; display: flex; gap: 8px;">
+                <button class="btn btn-success" onclick="manageDemo('start')">Start</button>
+                <button class="btn btn-warning" onclick="manageDemo('restart')">Restart</button>
+                <button class="btn btn-secondary" onclick="manageDemo('stop')">Stop</button>
+                <button class="btn btn-danger" onclick="confirmReset()">Reset</button>
+                <button class="btn btn-danger" onclick="manageDemo('delete')">Delete</button>
+            </div>
+        </div>
+        <div class="card" style="margin-top: 16px;">
+            <h3>Activity Logs</h3>
+            <div style="max-height: 300px; overflow-y: auto; font-family: 'Fira Code', monospace; font-size: 12px;" id="logs-container">
+                Loading logs...
+            </div>
+        </div>
+    </main>
+    <script>
+    const demoId = window.location.pathname.match(/\/demos\/(\d+)/)?.[1];
+    
+    async function loadDemo() {
+        const res = await fetch(`/api/admin/demos/${demoId}`, { credentials: 'include' });
+        const demo = await res.json();
+        document.getElementById('demo-name').textContent = demo.name;
+        document.getElementById('demo-status').textContent = demo.status.toUpperCase();
+        document.getElementById('demo-status').className = `status-badge status-${demo.status}`;
+        document.getElementById('demo-created').textContent = new Date(demo.created_at).toLocaleString();
+        document.getElementById('demo-timeout').textContent = demo.timeout_minutes;
+        const url = `${window.location.origin}/demo/${demo.slug}`;
+        document.getElementById('demo-url').textContent = url;
+    }
+    
+    async function loadLogs() {
+        const res = await fetch(`/api/admin/demos/${demoId}/logs`, { credentials: 'include' });
+        const logs = await res.json();
+        const container = document.getElementById('logs-container');
+        container.innerHTML = logs.map(l => `<div>[${l.created_at}] ${l.level.toUpperCase()}: ${l.message}</div>`).join('');
+    }
+    
+    async function manageDemo(action) {
+        const csrf = '<%= csrfToken %>';
+        await fetch(`/api/admin/demos/${demoId}/${action}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+            credentials: 'include'
+        });
+        loadDemo();
+    }
+
+    function confirmReset() {
+        if (confirm('Are you sure? This will destroy all active sessions and restore the baseline.')) {
+            manageDemo('reset');
+        }
+    }
+    
+    function copyUrl() {
+        navigator.clipboard.writeText(document.getElementById('demo-url').textContent);
+    }
+    
+    loadDemo();
+    loadLogs();
+    setInterval(loadDemo, 10000);
+    </script>
+</body>
+</html>

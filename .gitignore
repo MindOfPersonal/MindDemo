@@ -1,0 +1,7 @@
+dev/
+storage/logs/
+storage/projects/
+storage/sessions/
+storage/uploads/
+.env
+node_modules/

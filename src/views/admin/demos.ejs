@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Demos - MindDemo</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body class="admin-page">
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <span class="logo">MindDemo</span>
+        </div>
+        <nav class="sidebar-nav">
+            <a href="/admin/dashboard" class="nav-link">Dashboard</a>
+            <div class="nav-group">
+                <span class="nav-label">Demos</span>
+                <a href="/admin/demos" class="nav-link active">All Demos</a>
+                <a href="/admin/demos/create" class="nav-link">Create Demo</a>
+            </div>
+            <a href="/admin/logs" class="nav-link">Logs</a>
+            <a href="/admin/settings" class="nav-link">Settings</a>
+            <a href="/api/admin/logout" class="nav-link logout">Logout</a>
+        </nav>
+    </div>
+    <main class="main-content">
+        <header class="top-bar">
+            <div class="user-info">
+                <span>Admin: <%= username %></span>
+            </div>
+        </header>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+            <h1 style="font-size: 24px;">All Demos</h1>
+            <a href="/admin/demos/create" class="btn btn-primary">Create Demo</a>
+        </div>
+
+        <div class="card">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Slug</th>
+                        <th>Status</th>
+                        <th>Sessions</th>
+                        <th>Created</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="demos-list">
+                    <% demos.forEach(demo => { %>
+                    <tr data-id="<%= demo.id %>">
+                        <td><a href="/admin/demos/<%= demo.id %>"><%= demo.name %></a></td>
+                        <td><span style="color: var(--text-secondary);"><%= demo.slug %></span></td>
+                        <td><span class="status-badge status-<%= demo.status %>"><%= demo.status.toUpperCase() %></span></td>
+                        <td>-</td>
+                        <td><span style="color: var(--text-secondary);"><%= new Date(demo.created_at).toLocaleDateString() %></span></td>
+                        <td>
+                            <button class="btn btn-sm btn-secondary" onclick="startDemo(<%= demo.id %>)" <%= demo.status === 'running' ? 'disabled' : '' %>>Start</button>
+                            <button class="btn btn-sm btn-secondary" onclick="stopDemo(<%= demo.id %>)" <%= demo.status !== 'running' ? 'disabled' : '' %>>Stop</button>
+                            <button class="btn btn-sm btn-danger" onclick="deleteDemo(<%= demo.id %>)">Delete</button>
+                        </td>
+                    </tr>
+                    <% }); %>
+                </tbody>
+            </table>
+        </div>
+    </main>
+    <script>
+    async function startDemo(id) {
+        await fetch(`/api/admin/demos/${id}/start`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': '<%= csrfToken %>' },
+            credentials: 'include'
+        });
+        location.reload();
+    }
+    async function stopDemo(id) {
+        await fetch(`/api/admin/demos/${id}/stop`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': '<%= csrfToken %>' },
+            credentials: 'include'
+        });
+        location.reload();
+    }
+    async function deleteDemo(id) {
+        if (!confirm('Are you sure? This will delete the demo permanently.')) return;
+        await fetch(`/api/admin/demos/${id}`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': '<%= csrfToken %>' },
+            credentials: 'include'
+        });
+        location.href = '/admin/demos';
+    }
+    </script>
+</body>
+</html>

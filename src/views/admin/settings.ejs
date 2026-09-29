@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings - MindDemo</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body class="admin-page">
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <span class="logo">MindDemo</span>
+        </div>
+        <nav class="sidebar-nav">
+            <a href="/admin/dashboard" class="nav-link">Dashboard</a>
+            <div class="nav-group">
+                <span class="nav-label">Demos</span>
+                <a href="/admin/demos" class="nav-link">All Demos</a>
+                <a href="/admin/demos/create" class="nav-link">Create Demo</a>
+            </div>
+            <a href="/admin/logs" class="nav-link">Logs</a>
+            <a href="/admin/settings" class="nav-link active">Settings</a>
+            <a href="/api/admin/logout" class="nav-link logout">Logout</a>
+        </nav>
+    </div>
+    <main class="main-content">
+        <header class="top-bar">
+            <div class="user-info">
+                <span>Admin: Admin</span>
+            </div>
+        </header>
+        <h1 style="font-size: 24px; margin-bottom: 24px;">Settings</h1>
+        <div class="card">
+            <h2 style="margin-bottom: 16px; font-size: 18px;">System Configuration</h2>
+            <p style="color: var(--text-secondary); margin-bottom: 16px;">Configuration is managed via environment variables (.env file).</p>
+            <div style="font-family: 'Fira Code', monospace; font-size: 12px; background: var(--bg-primary); padding: 16px; border-radius: 8px; border: 1px solid var(--border);">
+                <div>NODE_ENV=production</div>
+                <div>PORT=3050</div>
+                <div>APP_URL=https://demo.minddevelopment.nl</div>
+                <div>SESSION_SECRET=...</div>
+                <div>DB_HOST=localhost</div>
+                <div>DB_NAME=minddemo</div>
+                <div>DB_USER=minddemo</div>
+                <div>DEMO_DEFAULT_TIMEOUT=30</div>
+                <div>DEMO_MAX_UPLOAD_SIZE=500</div>
+                <div>DEMO_MAX_SESSIONS=10</div>
+                <div>DOCKER_SOCKET=/var/run/docker.sock</div>
+            </div>
+        </div>
+    </main>
+</body>
+</html>

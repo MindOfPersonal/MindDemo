@@ -1,3 +1,0 @@
-# MindDemo
-
-

@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= title || 'Login' %> - MindDemo</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body class="auth-page">
+    <div class="auth-container">
+        <div class="auth-card">
+            <div class="auth-header">
+                <h1>MindDemo</h1>
+                <p class="auth-subtitle">Admin Login</p>
+            </div>
+            <% if (error) { %>
+            <div class="error-banner">
+                <%= error %>
+            </div>
+            <% } %>
+            <form id="login-form" method="POST" action="/api/admin/login">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" name="username" required autofocus>
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" required>
+                </div>
+                <button type="submit" class="btn btn-primary w-full">Login</button>
+            </form>
+        </div>
+    </div>
+    <script>
+    document.getElementById('login-form')?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const csrf = document.querySelector('input[name="_csrf"]').value;
+        const formData = new FormData(e.target);
+        const response = await fetch('/api/admin/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+            body: JSON.stringify(Object.fromEntries(formData))
+        });
+        const data = await response.json();
+        if (data.redirect) {
+            window.location.href = data.redirect;
+        } else if (data.error) {
+            alert(data.error);
+        }
+    });
+    </script>
+</body>
+</html>

@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - MindDemo</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body class="admin-page">
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <span class="logo">MindDemo</span>
+        </div>
+        <nav class="sidebar-nav">
+            <a href="/admin/dashboard" class="nav-link active">Dashboard</a>
+            <div class="nav-group">
+                <span class="nav-label">Demos</span>
+                <a href="/admin/demos" class="nav-link">All Demos</a>
+                <a href="/admin/demos/create" class="nav-link">Create Demo</a>
+            </div>
+            <a href="/admin/logs" class="nav-link">Logs</a>
+            <a href="/admin/settings" class="nav-link">Settings</a>
+            <a href="/api/admin/logout" class="nav-link logout">Logout</a>
+        </nav>
+    </div>
+    <main class="main-content">
+        <header class="top-bar">
+            <div class="user-info">
+                <span>Admin: <%= username %></span>
+            </div>
+        </header>
+        
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-icon">📊</div>
+                <div class="stat-value"><%= stats.totalDemos %></div>
+                <div class="stat-label">Total Demos</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">🏃</div>
+                <div class="stat-value"><%= stats.runningDemos %></div>
+                <div class="stat-label">Running Demos</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">⏸️</div>
+                <div class="stat-value"><%= stats.stoppedDemos %></div>
+                <div class="stat-label">Stopped Demos</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">💾</div>
+                <div class="stat-value"><%= stats.storageUsed %></div>
+                <div class="stat-label">Storage Used</div>
+            </div>
+        </div>
+
+        <div class="card" style="margin-bottom: 24px;">
+            <h2 style="margin-bottom: 16px; font-size: 18px;">Recent Demos</h2>
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Status</th>
+                        <th>Created</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <% recentDemos.forEach(demo => { %>
+                    <tr>
+                        <td>
+                            <a href="/admin/demos/<%= demo.id %>"><%= demo.name %></a>
+                        </td>
+                        <td>
+                            <span class="status-badge status-<%= demo.status %>"><%= demo.status.toUpperCase() %></span>
+                        </td>
+                        <td><%= new Date(demo.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) %></td>
+                        <td>
+                            <a href="/admin/demos/<%= demo.id %>" class="btn btn-sm btn-secondary">View</a>
+                        </td>
+                    </tr>
+                    <% }); %>
+                </tbody>
+            </table>
+        </div>
+    </main>
+</body>
+</html>

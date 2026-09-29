@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Demo - MindDemo</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body class="admin-page">
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <span class="logo">MindDemo</span>
+        </div>
+        <nav class="sidebar-nav">
+            <a href="/admin/dashboard" class="nav-link">Dashboard</a>
+            <div class="nav-group">
+                <span class="nav-label">Demos</span>
+                <a href="/admin/demos" class="nav-link">All Demos</a>
+                <a href="/admin/demos/create" class="nav-link active">Create Demo</a>
+            </div>
+            <a href="/admin/logs" class="nav-link">Logs</a>
+            <a href="/admin/settings" class="nav-link">Settings</a>
+            <a href="/api/admin/logout" class="nav-link logout">Logout</a>
+        </nav>
+    </div>
+    <main class="main-content">
+        <header class="top-bar">
+            <div class="user-info">
+                <span>Admin: Admin</span>
+            </div>
+        </header>
+        <div class="card">
+            <h2>Create Demo</h2>
+            <form id="create-demo-form">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                <div class="form-group">
+                    <label for="name">Project Name *</label>
+                    <input type="text" id="name" name="name" required>
+                </div>
+                <div class="form-group">
+                    <label for="description">Description</label>
+                    <textarea id="description" name="description" rows="3"></textarea>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="slug">Demo Slug</label>
+                        <input type="text" id="slug" name="slug" placeholder="Auto-generated if left empty">
+                    </div>
+                    <div class="form-group">
+                        <label for="timeout_minutes">Inactivity Timeout (minutes)</label>
+                        <input type="number" id="timeout_minutes" name="timeout_minutes" value="30" min="1">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="project_archive">Project Archive (ZIP) *</label>
+                    <input type="file" id="project_archive" name="project" accept=".zip" required>
+                </div>
+                <div class="form-group">
+                    <label for="install_command">Install Command</label>
+                    <input type="text" id="install_command" name="install_command" placeholder="npm install">
+                </div>
+                <div class="form-group">
+                    <label for="build_command">Build Command</label>
+                    <input type="text" id="build_command" name="build_command" placeholder="npm run build">
+                </div>
+                <div class="form-group">
+                    <label for="start_command">Start Command</label>
+                    <input type="text" id="start_command" name="start_command" value="npm start">
+                </div>
+                <div class="form-group">
+                    <label for="env_vars">Environment Variables</label>
+                    <textarea id="env_vars" name="env_vars" rows="5" placeholder="KEY=value&#10;PORT=3000&#10;DEMO_MODE=true"></textarea>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="demo_username">Demo Username</label>
+                        <input type="text" id="demo_username" name="demo_username" value="demo">
+                    </div>
+                    <div class="form-group">
+                        <label for="demo_password">Demo Password</label>
+                        <input type="text" id="demo_password" name="demo_password" value="demo123">
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary">Create Demo</button>
+            </form>
+        </div>
+    </main>
+    <script>
+    document.getElementById('create-demo-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const csrf = document.querySelector('input[name="_csrf"]').value;
+        const formData = new FormData(e.target);
+        const response = await fetch('/api/admin/demos', {
+            method: 'POST',
+            headers: { 'X-CSRF-Token': csrf },
+            credentials: 'include',
+            body: formData
+        });
+        const data = await response.json();
+        if (data.error) {
+            alert(data.error);
+        } else {
+            alert('Demo created!');
+            window.location.href = `/admin/demos/${data.demo.id}`;
+        }
+    });
+    </script>
+</body>
+</html>
