@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edit Demo - MindDemo</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="icon" type="image/png" href="/img/favicon.png">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+</head>
+    <body class="admin-page">
+    <input type="checkbox" id="navToggle" class="nav-toggle" hidden>
+        <div class="sidebar">
+        <div class="sidebar-header">
+            <a href="/admin/dashboard" class="logo"><img src="/img/logo.png" alt="MindDevelopment logo" class="logo-img"><span>MindDemo</span></a>
+        </div>
+        <nav class="sidebar-nav">
+            <a href="/admin/dashboard" class="nav-link">Dashboard</a>
+            <div class="nav-group">
+                <span class="nav-label">Demos</span>
+                <a href="/admin/demos" class="nav-link">All Demos</a>
+                <a href="/admin/demos/create" class="nav-link">Create Demo</a>
+            </div>
+            <a href="/admin/logs" class="nav-link">Logs</a>
+            <a href="/admin/settings" class="nav-link">Settings</a>
+            <a href="/api/admin/logout" class="nav-link logout">Logout</a>
+        </nav>
+    </div>
+    <main class="main-content">
+        <header class="top-bar">
+            <label class="menu-btn" for="navToggle" aria-label="Toggle navigation">☰</label>
+            <div class="user-info">
+                <span>Admin: <%= username || 'Admin' %></span>
+            </div>
+        </header>
+        <div class="card">
+            <h2>Edit Demo: <%= demo.name %></h2>
+            <form id="edit-demo-form">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                <div class="form-group">
+                    <label for="name">Project Name *</label>
+                    <input type="text" id="name" name="name" value="<%= demo.name %>" required>
+                </div>
+                <div class="form-group">
+                    <label for="description">Description</label>
+                    <textarea id="description" name="description" rows="3"><%= demo.description || '' %></textarea>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="slug">Demo Slug</label>
+                        <input type="text" id="slug" name="slug" value="<%= demo.slug || '' %>">
+                    </div>
+                    <div class="form-group">
+                        <label for="internal_port">Internal Port</label>
+                        <input type="number" id="internal_port" name="internal_port" value="<%= demo.internal_port || 3000 %>" min="1">
+                    </div>
+                    <div class="form-group">
+                        <label for="timeout_minutes">Inactivity Timeout (minutes)</label>
+                        <input type="number" id="timeout_minutes" name="timeout_minutes" value="<%= demo.timeout_minutes || 30 %>" min="1">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="install_command">Install Command</label>
+                    <input type="text" id="install_command" name="install_command" value="<%= demo.install_command || '' %>" placeholder="npm install">
+                </div>
+                <div class="form-group">
+                    <label for="build_command">Build Command</label>
+                    <input type="text" id="build_command" name="build_command" value="<%= demo.build_command || '' %>" placeholder="npm run build">
+                </div>
+                <div class="form-group">
+                    <label for="start_command">Start Command</label>
+                    <input type="text" id="start_command" name="start_command" value="<%= demo.start_command || 'npm start' %>">
+                </div>
+                <div class="form-group">
+                    <label for="demo_username">Demo Username</label>
+                    <input type="text" id="demo_username" name="demo_username" value="<%= demo.demo_username || 'demo' %>">
+                </div>
+                <div class="form-group">
+                    <label for="demo_password">Demo Password</label>
+                    <input type="text" id="demo_password" name="demo_password" value="<%= demo.demo_password || '' %>">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="show_credentials">Show Credentials</label>
+                        <select id="show_credentials" name="show_credentials">
+                            <option value="auto" <%= demo.show_credentials === 'auto' ? 'selected' : '' %>>Auto</option>
+                            <option value="hidden" <%= demo.show_credentials === 'hidden' ? 'selected' : '' %>>Hidden</option>
+                            <option value="button" <%= demo.show_credentials === 'button' ? 'selected' : '' %>>Button</option>
+                            <option value="panel" <%= demo.show_credentials === 'panel' ? 'selected' : '' %>>Panel</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label><input type="checkbox" id="banner_enabled" name="banner_enabled" <%= demo.banner_enabled ? 'checked' : '' %>> Banner enabled</label>
+                    </div>
+                    <div class="form-group">
+                        <label><input type="checkbox" id="landing_page" name="landing_page" <%= demo.landing_page ? 'checked' : '' %>> Landing page</label>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Environment Variables</label>
+                    <table class="env-editor" id="env-table" style="width:100%;border-collapse:collapse;">
+                        <thead>
+                            <tr>
+                                <th style="text-align:left;">Key</th>
+                                <th style="text-align:left;">Value</th>
+                                <th style="text-align:left;">Secret</th>
+                                <th style="text-align:left;">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <% if (envVars && envVars.length) { envVars.forEach(function(v) { %>
+                            <tr>
+                                <td><input type="text" class="env-key" value="<%= v.key %>" placeholder="KEY"></td>
+                                <td><input type="text" class="env-value" value="<%= v.value %>" placeholder="value"></td>
+                                <td><input type="checkbox" class="env-secret" <%= v.is_secret ? 'checked' : '' %>></td>
+                                <td><button type="button" class="btn btn-sm btn-secondary env-remove" title="Remove">✕</button></td>
+                            </tr>
+                            <% }) } %>
+                        </tbody>
+                    </table>
+                    <button type="button" class="btn btn-sm btn-secondary" id="env-add" style="margin-top:8px;">Add variable</button>
+                    <div class="meta" style="margin-top:6px;">Secret variables are masked in the UI and never exposed publicly.</div>
+                </div>
+                <div class="control-row" style="margin-top:24px;">
+                    <button type="submit" class="btn btn-primary">Save changes</button>
+                    <a href="/admin/demos/<%= demo.id %>" class="btn btn-secondary">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </main>
+    <script>
+        const demoId = <%= demo.id %>;
+        const csrf = <%- safeJson(csrfToken) %>;
+
+        function escAttr(s) {
+            return String(s == null ? '' : s)
+                .replace(/&/g, '&amp;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+        }
+
+        (function() {
+            const tbody = document.querySelector('#env-table tbody');
+            function addRow(key, value, secret) {
+                const tr = document.createElement('tr');
+                tr.innerHTML =
+                    '<td><input type="text" class="env-key" placeholder="KEY" value="' + escAttr(key) + '"></td>' +
+                    '<td><input type="text" class="env-value" placeholder="value" value="' + escAttr(value) + '"></td>' +
+                    '<td><input type="checkbox" class="env-secret"' + (secret ? 'checked' : '') + '></td>' +
+                    '<td><button type="button" class="btn btn-sm btn-secondary env-remove" title="Remove">✕</button></td>';
+                tbody.appendChild(tr);
+                attachRemove(tr);
+            }
+            function attachRemove(tr) {
+                tr.querySelector('.env-remove').addEventListener('click', () => tr.remove());
+            }
+            document.querySelectorAll('#env-table tbody tr').forEach(attachRemove);
+            document.getElementById('env-add').addEventListener('click', () => addRow('', '', false));
+
+            function collectEnv() {
+                const rows = document.querySelectorAll('#env-table tbody tr');
+                const arr = [];
+                rows.forEach(tr => {
+                    const key = tr.querySelector('.env-key').value.trim();
+                    if (!key) return;
+                    arr.push({
+                        key,
+                        value: tr.querySelector('.env-value').value,
+                        is_secret: tr.querySelector('.env-secret').checked ? 1 : 0
+                    });
+                });
+                return arr;
+            }
+
+            document.getElementById('edit-demo-form').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const f = e.target;
+                const payload = {
+                    name: f.name.value,
+                    slug: f.slug.value,
+                    description: f.description.value,
+                    start_command: f.start_command.value,
+                    install_command: f.install_command.value,
+                    build_command: f.build_command.value,
+                    internal_port: parseInt(f.internal_port.value, 10) || 3000,
+                    timeout_minutes: parseInt(f.timeout_minutes.value, 10) || 30,
+                    demo_username: f.demo_username.value,
+                    demo_password: f.demo_password.value,
+                    show_credentials: f.show_credentials.value,
+                    banner_enabled: f.banner_enabled.checked,
+                    landing_page: f.landing_page.checked,
+                    env_vars: collectEnv()
+                };
+                const response = await fetch('/api/admin/demos/' + demoId, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+                    credentials: 'include',
+                    body: JSON.stringify(payload)
+                });
+                const data = await response.json();
+                if (data.error) {
+                    alert(data.error);
+                } else {
+                    alert('Demo updated!');
+                    window.location.href = '/admin/demos/' + demoId;
+                }
+            });
+        })();
+    </script>
+</body>
+</html>

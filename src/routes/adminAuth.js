@@ -1,8 +1,9 @@
 const express = require('express');
-const bcrypt = require('bcrypt');
 const Admin = require('../models/Admin');
 const logger = require('../utils/logger');
+const discordEvents = require('../services/discordEvents');
 const { loginLimiter } = require('../middleware/rateLimit');
+const { newCSRFToken } = require('../middleware/csrf');
 
 const router = express.Router();
 
@@ -18,20 +19,40 @@ router.post('/login', loginLimiter(), async (req, res) => {
 
     if (!admin) {
       logger.warn(`Failed login attempt for username: ${username}`);
+      discordEvents.adminLoginFailed(req, username);
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    req.session.adminId = admin.id;
-    req.session.username = admin.username;
+    // Regenerate the session id on login to prevent session fixation, then
+    // issue a fresh CSRF token bound to the new session.
+    req.session.regenerate((regenErr) => {
+      if (regenErr) {
+        logger.error('Session regenerate error:', regenErr);
+        return res.status(500).json({ error: 'Internal server error' });
+      }
 
-    await Admin.updateLastLogin(admin.id);
+      req.session.adminId = admin.id;
+      req.session.username = admin.username;
+      newCSRFToken(req.session);
 
-    logger.info(`Admin logged in: ${admin.username}`);
-
-    res.json({ 
-      message: 'Login successful', 
-      csrfToken: req.session.csrfToken,
-      redirect: '/admin/dashboard'
+      req.session.save(async (saveErr) => {
+        if (saveErr) {
+          logger.error('Session save error:', saveErr);
+          return res.status(500).json({ error: 'Internal server error' });
+        }
+        try {
+          await Admin.updateLastLogin(admin.id);
+        } catch (err) {
+          logger.error('updateLastLogin error:', err);
+        }
+        logger.info(`Admin logged in: ${admin.username}`);
+        discordEvents.adminLogin(req, admin);
+        res.json({
+          message: 'Login successful',
+          csrfToken: req.session.csrfToken,
+          redirect: '/admin/dashboard'
+        });
+      });
     });
   } catch (err) {
     logger.error('Login error:', err);
@@ -40,20 +61,24 @@ router.post('/login', loginLimiter(), async (req, res) => {
 });
 
 router.post('/logout', (req, res) => {
+  const username = req.session && req.session.username;
   req.session.destroy(err => {
     if (err) {
       return res.status(500).json({ error: 'Logout failed' });
     }
+    discordEvents.adminLogout(req, username);
     res.clearCookie('minddemo_session');
     res.json({ message: 'Logged out', redirect: '/admin/login' });
   });
 });
 
 router.get('/logout', (req, res) => {
+  const username = req.session && req.session.username;
   req.session.destroy(err => {
     if (err) {
       return res.redirect('/admin/login');
     }
+    discordEvents.adminLogout(req, username);
     res.clearCookie('minddemo_session');
     res.redirect('/admin/login');
   });

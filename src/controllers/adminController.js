@@ -7,11 +7,10 @@ async function getDashboard(req, res) {
   try {
     const demos = await Demo.findAll();
     const allLogs = await DemoLog.getAll(100);
-    const activeSessions = await Demo.findActiveByDemoId ? null : null;
+    const totalSessions = await DemoSession.countActive();
 
     const totalDemos = demos.length;
     const activeDemos = demos.filter(d => d.status === 'running').length;
-    const totalSessions = 0;
 
     let totalSize = 0;
     for (const demo of demos) {
@@ -50,8 +49,11 @@ function getDirSize(dirPath) {
       const files = fs.readdirSync(dirPath);
       for (const file of files) {
         const filePath = require('path').join(dirPath, file);
-        const stat = fs.statSync(filePath);
-        if (stat.isDirectory()) {
+        // lstat so symlinks are never followed (prevents recursion loops).
+        const stat = fs.lstatSync(filePath);
+        if (stat.isSymbolicLink()) {
+          continue;
+        } else if (stat.isDirectory()) {
           size += getDirSize(filePath);
         } else {
           size += stat.size;

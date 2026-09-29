@@ -5,12 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Logs - MindDemo</title>
     <link rel="stylesheet" href="/css/style.css">
+    <link rel="icon" type="image/png" href="/img/favicon.png">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
 </head>
-<body class="admin-page">
-    <div class="sidebar">
+    <body class="admin-page">
+    <input type="checkbox" id="navToggle" class="nav-toggle" hidden>
+        <div class="sidebar">
         <div class="sidebar-header">
-            <span class="logo">MindDemo</span>
+            <a href="/admin/dashboard" class="logo"><img src="/img/logo.png" alt="MindDevelopment logo" class="logo-img"><span>MindDemo</span></a>
         </div>
         <nav class="sidebar-nav">
             <a href="/admin/dashboard" class="nav-link">Dashboard</a>
@@ -26,8 +28,9 @@
     </div>
     <main class="main-content">
         <header class="top-bar">
+            <label class="menu-btn" for="navToggle" aria-label="Toggle navigation">☰</label>
             <div class="user-info">
-                <span>Admin: Admin</span>
+                <span>Admin: <%= username || 'Admin' %></span>
             </div>
         </header>
         <h1 style="font-size: 24px; margin-bottom: 24px;">System Logs</h1>
@@ -38,6 +41,11 @@
         </div>
     </main>
     <script>
+    function esc(s) {
+        const d = document.createElement('div');
+        d.textContent = s == null ? '' : String(s);
+        return d.innerHTML;
+    }
     async function loadLogs() {
         try {
             const res = await fetch('/api/admin/demos/logs', { credentials: 'include' });
@@ -53,7 +61,7 @@
                 return;
             }
             container.innerHTML = logs.map(l =>
-                `<div style="padding: 4px 0; border-bottom: 1px solid var(--border);">[${l.created_at}] [${l.level}] ${l.demo_name || 'SYSTEM'}: ${l.message}</div>`
+                `<div style="padding: 4px 0; border-bottom: 1px solid var(--border);">[${esc(l.created_at)}] [${esc(l.level)}] ${esc(l.demo_name || 'SYSTEM')}: ${esc(l.message)}</div>`
             ).join('');
         } catch (err) {
             document.getElementById('logs-container').innerHTML =

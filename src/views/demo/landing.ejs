@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><%= demo.name %> - MindDemo</title>
     <link rel="stylesheet" href="/css/style.css">
+    <link rel="icon" type="image/png" href="/img/favicon.png">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
     <style>
         .demo-hero { display:flex; justify-content:space-between; align-items:center; gap:12px; }
@@ -16,13 +17,17 @@
         .meta { color:var(--muted, #8a94a6); font-size:13px; }
     </style>
 </head>
-<body class="admin-page">
-    <div class="main-content">
-        <header class="top-bar">
-            <div class="user-info"><span><%= demo.name %></span></div>
-        </header>
+    <body class="demo-landing">
+        <div class="content-wrap">
+            <header class="top-bar demo-topbar">
+                <div class="user-info brand"><img src="/img/logo.png" alt="MindDevelopment logo" class="logo-img"><span><%= demo.name %></span></div>
+                <div class="demo-status-pill" id="globalStatus">
+                    <span class="status-dot <%= demo.status === 'running' ? 'ready' : 'pending' %>" id="globalStatusDot"></span>
+                    <span id="globalStatusText">Status: <%= demo.status %></span>
+                </div>
+            </header>
 
-        <div class="card">
+        <div class="card demo-hero-card">
             <div class="demo-hero">
                 <h2 style="margin:0;"><%= demo.name %></h2>
                 <span class="status-badge status-<%= demo.status %>"><%= demo.status.toUpperCase() %></span>
@@ -31,9 +36,17 @@
                 <%= demo.description || 'A temporary, isolated demo environment that resets on inactivity.' %>
             </p>
 
-            <% if (demo.show_credentials) { %>
+            <div class="session-timer" id="sessionTimer" style="display:none;">
+                <span class="timer-label">Time remaining</span>
+                <strong id="sessionTimerValue">--:--</strong>
+            </div>
+
+            <% if (demo.show_credentials && demo.show_credentials !== 'hidden' && (demo.demo_username || demo.demo_password)) { %>
             <div class="banner" style="margin-top:12px;">
-                <strong>Demo credentials:</strong> <code>demo / demo123</code> &middot; This environment is temporary and resets when idle.
+                <strong>Demo credentials:</strong>
+                <% if (demo.demo_username) { %><code><%= demo.demo_username %></code><% } %>
+                <% if (demo.demo_password) { %> / <code><%= demo.demo_password %></code><% } %>
+                &middot; This environment is temporary and resets when idle.
             </div>
             <% } %>
 
@@ -41,33 +54,388 @@
                 <button id="startBtn" class="btn btn-success" style="<%= demo.status === 'running' ? 'display:none' : '' %>">Start demo</button>
                 <button id="stopBtn" class="btn btn-warning" style="<%= demo.status === 'running' ? '' : 'display:none' %>">Stop</button>
                 <button id="resetBtn" class="btn btn-secondary" style="<%= demo.status === 'running' ? '' : 'display:none' %>">Reset session</button>
-                <span class="pill" style="background:#143a27;color:#6ee7b7;">Status: <%= demo.status %></span>
+                <button id="shareBtn" class="btn btn-sm btn-outline" type="button">Share</button>
+                <button id="openBtn" class="btn btn-sm btn-outline" type="button">Open in new tab</button>
                 <a href="/admin/login" class="btn btn-sm btn-outline" style="margin-left:auto;">Admin login</a>
             </div>
+            <div id="shareFeedback" class="meta" style="margin-top:8px; display:none;"></div>
+        </div>
+
+        <div id="setupCard" class="card" style="margin-top:16px; display: none;">
+            <h3 style="margin:0 0 12px 0;">Setting up demo environment</h3>
+            <div class="setup-progress">
+                <ul class="setup-step-list" id="setupStepList"></ul>
+            </div>
+        </div>
+
+        <div id="consoleCard" class="demo-console" style="margin-top:16px; display: none;">
+            <div class="demo-console-header">
+                <span>
+                    <span class="status-dot pending" id="consoleDot"></span>
+                    <span id="consoleLabel">Starting…</span>
+                </span>
+            </div>
+            <div class="demo-console-output" id="consoleOutput"></div>
         </div>
 
         <div id="liveWrap" class="card" style="margin-top:16px;<%= demo.status === 'running' ? '' : 'display:none' %>">
             <div class="demo-hero">
                 <h3 style="margin:0;">Live view</h3>
                 <span class="meta" id="liveStatus">Loading demo…</span>
+                <button id="refreshBtn" class="btn btn-sm btn-outline" style="margin-left:auto;" title="Demo herladen" aria-label="Reload">&#8635; Reload</button>
+                <button id="maximizeBtn" class="btn btn-sm btn-outline" title="Volledig scherm bekijken" aria-label="Maximize">&#10530;</button>
             </div>
             <div style="margin-top:12px;">
                 <iframe id="liveFrame" class="demo-iframe"
-                        src="<%= demo.status === 'running' ? `/demo/${demo.slug}/live` : 'about:blank' %>"
-                        loading="lazy"
-                        title="<%= demo.name %> live demo"></iframe>
+                         src="about:blank"
+                         loading="lazy"
+                         title="<%= demo.name %> live demo"></iframe>
             </div>
+        </div>
+
+        <div class="card" id="activityCard" style="margin-top:16px;">
+            <div class="card-head">
+                <h3 style="margin:0;">Activity</h3>
+                <button id="activityToggle" class="btn btn-sm btn-outline" type="button">Show</button>
+            </div>
+            <div id="activityLog" class="logs-list" style="display:none;">
+                <p class="muted">No activity yet.</p>
+            </div>
+        </div>
+
+        <div id="fsOverlay" class="fs-overlay hidden" aria-hidden="true">
+            <button id="fsClose" class="btn btn-sm btn-outline fs-close" title="Sluitten" aria-label="Close fullscreen">✕</button>
+            <iframe id="fsFrame" class="fs-frame" src="about:blank" title="<%= demo.name %> live demo - fullscreen"></iframe>
         </div>
     </div>
 
     <script>
-        const slug = "<%= demo.slug %>";
-        const startBtn = document.getElementById('startBtn');
-        const stopBtn  = document.getElementById('stopBtn');
-        const resetBtn = document.getElementById('resetBtn');
-        const liveWrap  = document.getElementById('liveWrap');
-        const liveFrame = document.getElementById('liveFrame');
-        const liveStatus = document.getElementById('liveStatus');
+        const slug = <%- safeJson(demo.slug) %>;
+        const initialStatus = <%- safeJson(demo.status) %>;
+        const SETUP_STEPS = [
+            { id: 'prepare', label: 'Preparing environment', match: /Setting up demo environment/i },
+            { id: 'env', label: 'Loading environment variables', match: /Environment variables loaded/i },
+            { id: 'session', label: 'Creating demo session', match: /Demo session created/i },
+            { id: 'image', label: 'Building demo image', match: /Demo image ready/i },
+            { id: 'port', label: 'Allocating host port', match: /Allocating port/i },
+            { id: 'container', label: 'Creating Docker container', match: /Creating Docker container/i },
+            { id: 'start', label: 'Starting container', match: /Container started/i },
+            { id: 'wait', label: 'Waiting for application', match: /Waiting for application/i },
+            { id: 'ready', label: 'Application is ready', match: /Application is ready/i }
+        ];
+
+        const startBtn    = document.getElementById('startBtn');
+        const stopBtn     = document.getElementById('stopBtn');
+        const resetBtn    = document.getElementById('resetBtn');
+        const liveWrap    = document.getElementById('liveWrap');
+        const liveFrame   = document.getElementById('liveFrame');
+        const liveStatus  = document.getElementById('liveStatus');
+        const maximizeBtn = document.getElementById('maximizeBtn');
+        const fsOverlay   = document.getElementById('fsOverlay');
+        const fsFrame     = document.getElementById('fsFrame');
+        const fsClose     = document.getElementById('fsClose');
+        const setupCard   = document.getElementById('setupCard');
+        const consoleCard = document.getElementById('consoleCard');
+        const setupList   = document.getElementById('setupStepList');
+        const consoleOutput = document.getElementById('consoleOutput');
+        const consoleDot  = document.getElementById('consoleDot');
+        const consoleLabel = document.getElementById('consoleLabel');
+        const shareBtn    = document.getElementById('shareBtn');
+        const openBtn     = document.getElementById('openBtn');
+        const refreshBtn  = document.getElementById('refreshBtn');
+        const shareFeedback = document.getElementById('shareFeedback');
+        const activityToggle = document.getElementById('activityToggle');
+        const activityLog = document.getElementById('activityLog');
+        const globalStatusDot = document.getElementById('globalStatusDot');
+        const globalStatusText = document.getElementById('globalStatusText');
+        const sessionTimer = document.getElementById('sessionTimer');
+        const sessionTimerValue = document.getElementById('sessionTimerValue');
+
+        let sessionToken = null;
+        let lastContainerLogsLength = 0;
+        let pollInterval = null;
+        let healthInterval = null;
+        let timerInterval = null;
+        let sessionStartTs = null;
+        let sessionTimeoutMin = <%- safeJson(demo.timeout_minutes || 30) %>;
+        window.previewLoaded = false;
+
+        function setGlobalStatus(state, text) {
+            if (globalStatusDot) globalStatusDot.className = 'status-dot ' + state;
+            if (globalStatusText) globalStatusText.textContent = text;
+        }
+
+        function startTimer(startedAt) {
+            sessionStartTs = startedAt ? new Date(startedAt).getTime() : Date.now();
+            if (sessionTimer) sessionTimer.style.display = '';
+            updateTimer();
+            if (timerInterval) clearInterval(timerInterval);
+            timerInterval = setInterval(updateTimer, 1000);
+        }
+
+        function stopTimer() {
+            if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+            sessionStartTs = null;
+            if (sessionTimer) sessionTimer.style.display = 'none';
+        }
+
+        function updateTimer() {
+            if (!sessionStartTs || !sessionTimerValue) return;
+            const total = sessionTimeoutMin * 60 * 1000;
+            const left = total - (Date.now() - sessionStartTs);
+            if (left <= 0) {
+                sessionTimerValue.textContent = 'expired';
+                return;
+            }
+            const m = Math.floor(left / 60000);
+            const s = Math.floor((left % 60000) / 1000);
+            sessionTimerValue.textContent = m + ':' + String(s).padStart(2, '0');
+        }
+
+        async function loadSessionInfo() {
+            if (!sessionToken) return;
+            try {
+                const res = await fetch('/api/session/' + sessionToken, { credentials: 'same-origin' });
+                if (!res.ok) return;
+                const data = await res.json();
+                if (data.demo && data.demo.timeout_minutes) sessionTimeoutMin = data.demo.timeout_minutes;
+                startTimer(data.session ? data.session.started_at : null);
+            } catch (e) {}
+        }
+
+        function renderActivity(logs) {
+            if (!activityLog || !Array.isArray(logs)) return;
+            const list = logs.slice(0, 40);
+            if (!list.length) return;
+            activityLog.innerHTML = list.map(function(l) {
+                return '<div class="log-row log-' + l.level + '">' +
+                    '<span class="log-time">' + new Date(l.created_at).toLocaleTimeString() + '</span>' +
+                    '<span class="log-level">' + l.level + '</span>' +
+                    '<span class="log-msg">' + escapeHtml(l.message) + '</span></div>';
+            }).join('');
+        }
+
+        function toggleFullscreen(open) {
+            if (open) {
+                fsFrame.src = liveFrame.src;
+                fsOverlay.classList.remove('hidden');
+                fsOverlay.setAttribute('aria-hidden', 'false');
+                document.body.style.overflow = 'hidden';
+            } else {
+                fsFrame.src = 'about:blank';
+                fsOverlay.classList.add('hidden');
+                fsOverlay.setAttribute('aria-hidden', 'true');
+                document.body.style.overflow = '';
+            }
+        }
+
+        if (maximizeBtn) {
+            maximizeBtn.addEventListener('click', () => toggleFullscreen(true));
+        }
+        if (fsClose) {
+            fsClose.addEventListener('click', () => toggleFullscreen(false));
+        }
+        if (fsOverlay) {
+            fsOverlay.addEventListener('click', (e) => {
+                if (e.target === fsOverlay) toggleFullscreen(false);
+            });
+        }
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !fsOverlay.classList.contains('hidden')) toggleFullscreen(false);
+        });
+
+        function renderSetupSteps() {
+            if (!setupList) return;
+            setupList.innerHTML = SETUP_STEPS.map(function(step) {
+                return '<li class="setup-step pending" id="step-' + step.id + '">' +
+                    '<span class="step-icon">○</span>' +
+                    '<span class="step-content">' +
+                    '<div class="step-label">' + step.label + '</div>' +
+                    '</span>' +
+                    '</li>';
+            }).join('');
+        }
+
+        function updateSetupProgress(logs) {
+            if (!logs.length) return;
+
+            const seenSteps = [];
+            logs.forEach(function(log) {
+                SETUP_STEPS.forEach(function(step) {
+                    if (step.match.test(log.message)) {
+                        seenSteps.push(step.id);
+                    }
+                });
+            });
+
+            const isError = logs.some(function(l) { return l.level === 'error'; });
+
+            SETUP_STEPS.forEach(function(step) {
+                const el = document.getElementById('step-' + step.id);
+                if (!el) return;
+                el.className = 'setup-step pending';
+                const icon = el.querySelector('.step-icon');
+
+                if (seenSteps.includes(step.id)) {
+                    el.className = 'setup-step completed';
+                    if (icon) icon.textContent = '✓';
+                } else {
+                    const prevIndex = SETUP_STEPS.findIndex(function(s) { return s.id === step.id; });
+                    const hasPrev = prevIndex > 0 && seenSteps.includes(SETUP_STEPS[prevIndex - 1].id);
+                    if (hasPrev) {
+                        el.className = 'setup-step active';
+                        if (icon) icon.innerHTML = '<span class="spinner"></span>';
+                    } else {
+                        if (icon) icon.textContent = '○';
+                    }
+                }
+            });
+
+            const lastLog = logs[logs.length - 1];
+            if (lastLog) {
+                document.querySelector('#setupCard h3').textContent = lastLog.message;
+            }
+        }
+
+        function appendContainerLog(text) {
+            const time = new Date().toLocaleTimeString();
+            const lines = text.split('\n').filter(function(l) { return l.trim(); });
+            lines.forEach(function(line) {
+                const div = document.createElement('div');
+                div.className = 'console-line';
+                const span = document.createElement('span');
+                span.className = 'timestamp';
+                span.textContent = '[' + time + '] ';
+                div.appendChild(span);
+                div.appendChild(document.createTextNode(line.trim()));
+                consoleOutput.appendChild(div);
+            });
+            consoleOutput.scrollTop = consoleOutput.scrollHeight;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function appendContainerLogs(logText) {
+            if (!logText) return;
+            if (logText.length > lastContainerLogsLength) {
+                const newText = logText.substring(lastContainerLogsLength);
+                const time = new Date().toLocaleTimeString();
+                const lines = newText.split('\n').filter(function(l) { return l.trim(); });
+                lines.forEach(function(line) {
+                    const div = document.createElement('div');
+                    div.className = 'console-line';
+                    div.innerHTML = '<span class="timestamp">[' + time + ']</span> ' + escapeHtml(line.trim());
+                    consoleOutput.appendChild(div);
+                });
+                consoleOutput.scrollTop = consoleOutput.scrollHeight;
+                lastContainerLogsLength = logText.length;
+            }
+        }
+
+        function updateConsoleState(ready, label) {
+            if (consoleDot) consoleDot.className = 'status-dot ' + (ready ? 'ready' : 'pending');
+            if (consoleLabel) consoleLabel.textContent = label;
+        }
+
+        async function startConsole() {
+            if (setupCard) setupCard.style.display = '';
+            if (consoleCard) consoleCard.style.display = '';
+            renderSetupSteps();
+            lastContainerLogsLength = 0;
+            if (consoleOutput) consoleOutput.innerHTML = '';
+            updateConsoleState(false, 'Starting…');
+
+            pollLogs();
+            pollHealth();
+
+            pollInterval = setInterval(pollLogs, 3000);
+            healthInterval = setInterval(pollHealth, 2000);
+        }
+
+        function stopConsole() {
+            if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+            if (healthInterval) { clearInterval(healthInterval); healthInterval = null; }
+            if (setupCard) setupCard.style.display = 'none';
+            if (consoleCard) consoleCard.style.display = 'none';
+        }
+
+        async function pollLogs() {
+            if (!sessionToken) return;
+
+            try {
+                const logsRes = await fetch(`/api/session/${sessionToken}/logs`, { credentials: 'same-origin' });
+                if (logsRes.ok) {
+                    const logs = await logsRes.json();
+                    updateSetupProgress(logs);
+                    renderActivity(logs);
+                }
+            } catch (e) {}
+
+            try {
+                const containerRes = await fetch(`/api/session/${sessionToken}/container-logs`, { credentials: 'same-origin' });
+                if (containerRes.ok) {
+                    const data = await containerRes.json();
+                    if (data.logs) {
+                        appendContainerLogs(data.logs);
+                        if (data.ready) {
+                            updateConsoleState(true, 'Container running');
+                        }
+                    } else if (data.containerStopped) {
+                        updateConsoleState(false, 'Container stopped');
+                    }
+                }
+            } catch (e) {}
+        }
+
+        async function pollHealth() {
+            if (!sessionToken) return;
+
+            try {
+                const res = await fetch(`/api/session/${sessionToken}/health`, { credentials: 'same-origin' });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.healthy && !window.previewLoaded) {
+                        window.previewLoaded = true;
+                        updateConsoleState(true, 'Application ready');
+                        setGlobalStatus('ready', 'Status: running');
+                        if (liveWrap && liveFrame) {
+                            liveWrap.style.display = '';
+                            liveFrame.src = '/demo/' + slug + '/live';
+                            liveStatus.textContent = 'Demo running';
+                        }
+                    } else if (data.healthy) {
+                        updateConsoleState(true, 'Application ready');
+                        setGlobalStatus('ready', 'Status: running');
+                    } else {
+                        if (data.containerStopped) {
+                            updateConsoleState(false, 'Container stopped');
+                            setGlobalStatus('pending', 'Status: stopped');
+                        } else {
+                            updateConsoleState(false, 'Starting…');
+                            setGlobalStatus('pending', 'Status: starting');
+                        }
+                        liveStatus.textContent = 'Starting demo…';
+                    }
+                } else if (res.status === 404) {
+                    // The session was reaped (e.g. page was idle too long).
+                    stopConsole();
+                    stopTimer();
+                    sessionToken = null;
+                    window.previewLoaded = false;
+                    liveFrame.src = 'about:blank';
+                    liveWrap.style.display = 'none';
+                    startBtn.style.display = '';
+                    stopBtn.style.display = 'none';
+                    resetBtn.style.display = 'none';
+                    setGlobalStatus('pending', 'Status: stopped');
+                    liveStatus.textContent = 'Session ended — click Start';
+                }
+            } catch (e) {}
+        }
 
         async function post(path) {
             const res = await fetch(`/demo/${slug}/${path}`, { method: 'POST', credentials: 'same-origin' });
@@ -77,29 +445,96 @@
         async function start() {
             const r = await post('start');
             if (r.error) { return alert(r.error); }
-            liveWrap.style.display = '';
+
+            sessionToken = r.sessionToken || null;
+            lastContainerLogsLength = 0;
+            window.previewLoaded = false;
+
             startBtn.style.display = 'none';
             stopBtn.style.display = '';
             resetBtn.style.display = '';
-            liveFrame.src = `/demo/${slug}/live?t=${Date.now()}`;
+            liveStatus.textContent = 'Starting demo…';
+            liveWrap.style.display = 'none';
+            setGlobalStatus('pending', 'Status: starting');
+
+            if (sessionToken) {
+                startConsole();
+                loadSessionInfo();
+            } else {
+                // No session could be created: restore the Start button so the
+                // visitor can retry instead of being stuck.
+                startBtn.style.display = '';
+                stopBtn.style.display = 'none';
+                resetBtn.style.display = 'none';
+                liveStatus.textContent = 'Failed to start demo';
+            }
         }
 
         async function stop() {
             const r = await post('stop');
             if (r.error) { return alert(r.error); }
+            stopConsole();
+            stopTimer();
+            sessionToken = null;
+            window.previewLoaded = false;
             liveFrame.src = 'about:blank';
             liveWrap.style.display = 'none';
             startBtn.style.display = '';
             stopBtn.style.display = 'none';
             resetBtn.style.display = 'none';
+            setGlobalStatus('pending', 'Status: stopped');
+            liveStatus.textContent = 'Demo stopped';
         }
 
         async function reset() {
             const r = await post('reset');
             if (r.error) { return alert(r.error); }
-            liveStatus.textContent = 'Refreshing…';
-            liveFrame.src = `/demo/${slug}/live?t=${Date.now()}`;
+            stopConsole();
+            stopTimer();
+            sessionToken = null;
+            window.previewLoaded = false;
+            liveFrame.src = 'about:blank';
+            liveWrap.style.display = 'none';
+            liveStatus.textContent = 'Resetting…';
+            // Create a fresh session instead of pointing the iframe at a new
+            // proxy session the page does not know about (which would have no
+            // polling/heartbeat and be reaped).
+            await start();
         }
+
+        function showShareFeedback(msg) {
+            if (!shareFeedback) return;
+            shareFeedback.textContent = msg;
+            shareFeedback.style.display = '';
+            setTimeout(function() { shareFeedback.style.display = 'none'; }, 2500);
+        }
+
+        if (shareBtn) shareBtn.addEventListener('click', async function() {
+            const url = window.location.href;
+            try {
+                await navigator.clipboard.writeText(url);
+                showShareFeedback('Link gekopieerd naar klembord.');
+            } catch (e) {
+                showShareFeedback(url);
+            }
+        });
+
+        if (openBtn) openBtn.addEventListener('click', function() {
+            window.open(window.location.href, '_blank', 'noopener');
+        });
+
+        if (refreshBtn) refreshBtn.addEventListener('click', function() {
+            if (liveFrame && liveFrame.src && liveFrame.src !== 'about:blank') {
+                liveFrame.src = '/demo/' + slug + '/live?t=' + Date.now();
+                liveStatus.textContent = 'Herladen…';
+            }
+        });
+
+        if (activityToggle) activityToggle.addEventListener('click', function() {
+            const hidden = activityLog.style.display === 'none';
+            activityLog.style.display = hidden ? '' : 'none';
+            activityToggle.textContent = hidden ? 'Hide' : 'Show';
+        });
 
         if (startBtn) startBtn.addEventListener('click', start);
         if (stopBtn)  stopBtn.addEventListener('click', stop);
@@ -108,6 +543,12 @@
         if (liveFrame) {
             liveFrame.addEventListener('load', () => { liveStatus.textContent = 'Demo running'; });
             liveFrame.addEventListener('error', () => { liveStatus.textContent = 'Demo unavailable'; });
+        }
+
+        // If the demo is already running (e.g. the visitor reloads), attach to
+        // the existing session so polling keeps it alive and the console works.
+        if (initialStatus === 'running') {
+            start();
         }
     </script>
 </body>

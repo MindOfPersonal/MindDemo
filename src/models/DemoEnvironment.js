@@ -16,6 +16,10 @@ class DemoEnvironment {
     return rows;
   }
 
+  static async clear(demoId) {
+    await db.query('DELETE FROM demo_environment WHERE demo_id = ?', [demoId]);
+  }
+
   static async getEnvVarsForContainer(demoId) {
     const rows = await this.getByDemoId(demoId);
     const env = {};

@@ -1,14 +1,17 @@
+const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
 
 function generateSlug(name) {
-  return name
+  const slug = String(name)
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
+  return slug || 'demo';
 }
 
 function generateUniqueSlug(name) {
-  return `${generateSlug(name)}-${Math.random().toString(36).substring(2, 8)}`;
+  const suffix = crypto.randomBytes(3).toString('hex');
+  return `${generateSlug(name)}-${suffix}`;
 }
 
 function generateSessionToken() {

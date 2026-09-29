@@ -57,14 +57,19 @@ class Demo {
   }
 
   static async update(id, data) {
+    const ALLOWED = new Set([
+      'name', 'slug', 'description', 'start_command', 'install_command',
+      'build_command', 'internal_port', 'timeout_minutes', 'env_vars',
+      'demo_username', 'demo_email', 'demo_password', 'show_credentials',
+      'banner_enabled', 'landing_page', 'status'
+    ]);
     const fields = [];
     const values = [];
     
     for (const [key, value] of Object.entries(data)) {
-      if (key !== 'id' && value !== undefined) {
-        fields.push(`${key} = ?`);
-        values.push(typeof value === 'object' ? JSON.stringify(value) : value);
-      }
+      if (key === 'id' || value === undefined || !ALLOWED.has(key)) continue;
+      fields.push(`${key} = ?`);
+      values.push(typeof value === 'object' && value !== null ? JSON.stringify(value) : value);
     }
     
     if (fields.length === 0) return;

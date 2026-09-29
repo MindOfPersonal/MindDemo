@@ -5,12 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Settings - MindDemo</title>
     <link rel="stylesheet" href="/css/style.css">
+    <link rel="icon" type="image/png" href="/img/favicon.png">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
 </head>
-<body class="admin-page">
-    <div class="sidebar">
+    <body class="admin-page">
+    <input type="checkbox" id="navToggle" class="nav-toggle" hidden>
+        <div class="sidebar">
         <div class="sidebar-header">
-            <span class="logo">MindDemo</span>
+            <a href="/admin/dashboard" class="logo"><img src="/img/logo.png" alt="MindDevelopment logo" class="logo-img"><span>MindDemo</span></a>
         </div>
         <nav class="sidebar-nav">
             <a href="/admin/dashboard" class="nav-link">Dashboard</a>
@@ -26,28 +28,72 @@
     </div>
     <main class="main-content">
         <header class="top-bar">
+                <label class="menu-btn" for="navToggle" aria-label="Toggle navigation">☰</label>
             <div class="user-info">
-                <span>Admin: Admin</span>
+                <span>Admin: <%= username || 'Admin' %></span>
             </div>
         </header>
         <h1 style="font-size: 24px; margin-bottom: 24px;">Settings</h1>
         <div class="card">
+            <h2 style="margin-bottom: 16px; font-size: 18px;">Discord Webhook Logging</h2>
+            <p style="color: var(--text-secondary); margin-bottom: 16px;">
+                Admin-acties, demo- en sessielevenscyclus, beveiligingsmeldingen en fouten worden naar Discord gestuurd.
+            </p>
+            <div style="font-family: 'Fira Code', monospace; font-size: 12px; background: var(--bg-primary); padding: 16px; border-radius: 8px; border: 1px solid var(--border);">
+                <div>DISCORD_WEBHOOK_ENABLED=<%= settings.DISCORD_ENABLED ? 'true' : 'false' %></div>
+                <div>DISCORD_WEBHOOK_URL=<%= settings.DISCORD_WEBHOOK_SET ? '***configured***' : 'not set' %></div>
+                <div>DISCORD_WEBHOOK_USERNAME=<%= settings.DISCORD_WEBHOOK_USERNAME %></div>
+                <div>DISCORD_WEBHOOK_EVENTS=<%= settings.DISCORD_EVENTS %></div>
+                <div>DISCORD_WEBHOOK_MENTION=<%= settings.DISCORD_MENTION_SET ? '***configured***' : 'not set' %></div>
+            </div>
+            <div style="margin-top: 16px; display: flex; align-items: center; gap: 12px;">
+                <button type="button" id="discordTestBtn" class="btn btn-primary" <%= settings.DISCORD_ENABLED && settings.DISCORD_WEBHOOK_SET ? '' : 'disabled' %>>Test webhook</button>
+                <span id="discordTestResult" style="font-size: 13px; color: var(--text-secondary);"></span>
+            </div>
+        </div>
+        <div class="card">
             <h2 style="margin-bottom: 16px; font-size: 18px;">System Configuration</h2>
             <p style="color: var(--text-secondary); margin-bottom: 16px;">Configuration is managed via environment variables (.env file).</p>
             <div style="font-family: 'Fira Code', monospace; font-size: 12px; background: var(--bg-primary); padding: 16px; border-radius: 8px; border: 1px solid var(--border);">
-                <div>NODE_ENV=production</div>
-                <div>PORT=3050</div>
-                <div>APP_URL=https://demo.minddevelopment.nl</div>
-                <div>SESSION_SECRET=...</div>
-                <div>DB_HOST=localhost</div>
-                <div>DB_NAME=minddemo</div>
-                <div>DB_USER=minddemo</div>
-                <div>DEMO_DEFAULT_TIMEOUT=30</div>
-                <div>DEMO_MAX_UPLOAD_SIZE=500</div>
-                <div>DEMO_MAX_SESSIONS=10</div>
-                <div>DOCKER_SOCKET=/var/run/docker.sock</div>
+                <div>NODE_ENV=<%= settings.NODE_ENV %></div>
+                <div>PORT=<%= settings.PORT %></div>
+                <div>APP_URL=<%= settings.APP_URL %></div>
+                <div>SESSION_SECRET=***</div>
+                <div>DB_HOST=<%= settings.DB_HOST %></div>
+                <div>DB_NAME=<%= settings.DB_NAME %></div>
+                <div>DB_USER=<%= settings.DB_USER %></div>
+                <div>DEMO_DEFAULT_TIMEOUT=<%= settings.DEMO_DEFAULT_TIMEOUT %></div>
+                <div>DEMO_MAX_UPLOAD_SIZE=<%= settings.DEMO_MAX_UPLOAD_SIZE %></div>
+                <div>DEMO_MAX_SESSIONS=<%= settings.DEMO_MAX_SESSIONS %></div>
+                <div>DEMO_SESSION_GRACE_SECONDS=<%= settings.DEMO_SESSION_GRACE_SECONDS %></div>
+                <div>DOCKER_SOCKET=<%= settings.DOCKER_SOCKET %></div>
             </div>
         </div>
     </main>
+    <script>
+        (function () {
+            var btn = document.getElementById('discordTestBtn');
+            var result = document.getElementById('discordTestResult');
+            if (!btn) return;
+            btn.addEventListener('click', function () {
+                btn.disabled = true;
+                result.textContent = 'Versturen...';
+                fetch('/api/admin/discord/test', {
+                    method: 'POST',
+                    headers: { 'X-CSRF-Token': '<%= csrfToken %>' }
+                })
+                    .then(function (res) { return res.json().then(function (body) { return { ok: res.ok, body: body }; }); })
+                    .then(function (r) {
+                        result.textContent = r.ok ? 'Testmelding verstuurd.' : (r.body.error || 'Mislukt');
+                        result.style.color = r.ok ? 'var(--success, #2ecc71)' : 'var(--danger, #e74c3c)';
+                    })
+                    .catch(function () {
+                        result.textContent = 'Netwerkfout bij versturen.';
+                        result.style.color = 'var(--danger, #e74c3c)';
+                    })
+                    .finally(function () { btn.disabled = false; });
+            });
+        })();
+    </script>
 </body>
 </html>

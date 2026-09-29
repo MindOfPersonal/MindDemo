@@ -3,5 +3,8 @@ storage/logs/
 storage/projects/
 storage/sessions/
 storage/uploads/
+storage/baselines/
 .env
 node_modules/
+cookies.txt
+session-*.md

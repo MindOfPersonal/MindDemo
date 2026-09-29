@@ -9,27 +9,32 @@ if (!fs.existsSync(logPath)) {
 
 const logFile = path.join(logPath, 'minddemo.log');
 
+// Asynchronous append stream instead of appendFileSync on every line, so
+// logging does not block the event loop under load.
+const stream = fs.createWriteStream(logFile, { flags: 'a' });
+stream.on('error', (err) => {
+  console.error(`Log stream error: ${err.message}`);
+});
+
 function timestamp() {
   const now = new Date();
   return now.toISOString().replace('T', ' ').substring(0, 19);
 }
 
 function log(level, message, ...args) {
-  const line = `${timestamp()} [${level}]: ${message}`;
-  
+  let line = `${timestamp()} [${level}]: ${message}`;
+
   if (args.length > 0) {
     try {
       const parts = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a));
-      console.log(`${line} ${parts.join(' ')}`);
-      fs.appendFileSync(logFile, `${line} ${parts.join(' ')}\n`);
+      line += ` ${parts.join(' ')}`;
     } catch {
-      console.log(line);
-      fs.appendFileSync(logFile, `${line}\n`);
+      // Keep the base line if an argument cannot be serialized.
     }
-  } else {
-    console.log(line);
-    fs.appendFileSync(logFile, `${line}\n`);
   }
+
+  console.log(line);
+  stream.write(`${line}\n`);
 }
 
 const logger = {

@@ -5,12 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Create Demo - MindDemo</title>
     <link rel="stylesheet" href="/css/style.css">
+    <link rel="icon" type="image/png" href="/img/favicon.png">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
 </head>
-<body class="admin-page">
-    <div class="sidebar">
+    <body class="admin-page">
+    <input type="checkbox" id="navToggle" class="nav-toggle" hidden>
+        <div class="sidebar">
         <div class="sidebar-header">
-            <span class="logo">MindDemo</span>
+            <a href="/admin/dashboard" class="logo"><img src="/img/logo.png" alt="MindDevelopment logo" class="logo-img"><span>MindDemo</span></a>
         </div>
         <nav class="sidebar-nav">
             <a href="/admin/dashboard" class="nav-link">Dashboard</a>
@@ -26,8 +28,9 @@
     </div>
     <main class="main-content">
         <header class="top-bar">
+            <label class="menu-btn" for="navToggle" aria-label="Toggle navigation">☰</label>
             <div class="user-info">
-                <span>Admin: Admin</span>
+                <span>Admin: <%= username || 'Admin' %></span>
             </div>
         </header>
         <div class="card">

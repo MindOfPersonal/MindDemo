@@ -123,6 +123,11 @@ async function initialize() {
 
 async function createDefaultAdmin() {
   try {
+    if (!process.env.ADMIN_USERNAME || !process.env.ADMIN_PASSWORD) {
+      logger.warn('ADMIN_USERNAME/ADMIN_PASSWORD not set; skipping default admin creation');
+      return;
+    }
+
     const existing = await db.query(
       'SELECT COUNT(*) as count FROM admins WHERE username = ?',
       [process.env.ADMIN_USERNAME]

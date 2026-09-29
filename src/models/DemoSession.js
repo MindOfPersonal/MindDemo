@@ -40,6 +40,21 @@ class DemoSession {
     );
   }
 
+  static async endAllForDemo(demoId) {
+    return db.query(
+      'UPDATE demo_sessions SET status = "stopped", ended_at = NOW() ' +
+      'WHERE demo_id = ? AND status IN ("active", "inactive")',
+      [demoId]
+    );
+  }
+
+  static async updateContainerInfo(id, { container_id, container_port }) {
+    await db.query(
+      'UPDATE demo_sessions SET container_id = ?, container_port = ? WHERE id = ?',
+      [container_id, container_port, id]
+    );
+  }
+
   static async findActiveByDemoId(demoId) {
     return db.query(
       'SELECT * FROM demo_sessions WHERE demo_id = ? AND status IN ("active", "inactive")',
@@ -53,6 +68,25 @@ class DemoSession {
        JOIN demos d ON s.demo_id = d.id 
        WHERE s.status IN ("active", "inactive") 
        AND s.last_activity < DATE_SUB(NOW(), INTERVAL d.timeout_minutes MINUTE)`
+    );
+  }
+
+  static async countActive() {
+    const rows = await db.query(
+      'SELECT COUNT(*) AS count FROM demo_sessions WHERE status IN ("active", "inactive")'
+    );
+    return rows[0] ? rows[0].count : 0;
+  }
+
+  // Sessions that stopped sending heartbeats (visitor closed the page). The
+  // grace window is intentionally short so closed tabs free their container
+  // quickly, independent of the longer per-demo inactivity timeout.
+  static async findStaleSessions(graceSeconds = 60) {
+    const seconds = Math.max(1, parseInt(graceSeconds, 10) || 60);
+    return db.query(
+      `SELECT * FROM demo_sessions
+       WHERE status IN ("active", "inactive")
+       AND last_activity < DATE_SUB(NOW(), INTERVAL ${seconds} SECOND)`
     );
   }
 

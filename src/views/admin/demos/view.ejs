@@ -5,12 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Demo - MindDemo</title>
     <link rel="stylesheet" href="/css/style.css">
+    <link rel="icon" type="image/png" href="/img/favicon.png">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
 </head>
-<body class="admin-page">
-    <div class="sidebar">
+    <body class="admin-page">
+    <input type="checkbox" id="navToggle" class="nav-toggle" hidden>
+        <div class="sidebar">
         <div class="sidebar-header">
-            <span class="logo">MindDemo</span>
+            <a href="/admin/dashboard" class="logo"><img src="/img/logo.png" alt="MindDevelopment logo" class="logo-img"><span>MindDemo</span></a>
         </div>
         <nav class="sidebar-nav">
             <a href="/admin/dashboard" class="nav-link">Dashboard</a>
@@ -26,22 +28,29 @@
     </div>
     <main class="main-content">
         <header class="top-bar">
+            <label class="menu-btn" for="navToggle" aria-label="Toggle navigation">☰</label>
             <div class="user-info">
-                <span>Admin: Admin</span>
+                <span>Admin: <%= username || 'Admin' %></span>
             </div>
         </header>
         <div class="card">
-            <h2 id="demo-name">Demo</h2>
-            <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px;">
+                <h2 id="demo-name" style="margin: 0;">Demo</h2>
+                <a href="/admin/demos" class="btn btn-sm btn-secondary" style="white-space: nowrap;">&larr; Back to demos</a>
+            </div>
+            <div class="control-row" style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px;">
                 <span class="status-badge status-stopped" id="demo-status">STATUS</span>
                 <span class="tag tag-blue" id="demo-session-count">Sessions: 0</span>
             </div>
             <div class="banner">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <div>
-                        <strong>Demo URL:</strong> <span id="demo-url">/</span>
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+                    <div style="word-break: break-all;">
+                        <strong>Demo URL:</strong> <span id="demo-url" style="word-break: break-all;">/</span>
                     </div>
-                    <button class="btn btn-sm btn-secondary" onclick="copyUrl()">Copy URL</button>
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                        <button class="btn btn-sm btn-secondary" onclick="copyUrl()" style="white-space: nowrap;">Copy URL</button>
+                        <button class="btn btn-sm btn-primary" onclick="openUrl()" style="white-space: nowrap;">Open</button>
+                    </div>
                 </div>
             </div>
             <div style="margin-top: 16px;">
@@ -49,24 +58,91 @@
                 <p><strong>Last Activity:</strong> <span id="demo-activity">-</span></p>
                 <p><strong>Timeout:</strong> <span id="demo-timeout">-</span> minutes</p>
             </div>
-            <div style="margin-top: 24px; display: flex; gap: 8px;">
+            <div class="control-row" style="margin-top: 24px; display: flex; gap: 8px;">
                 <button class="btn btn-success" onclick="manageDemo('start')">Start</button>
                 <button class="btn btn-warning" onclick="manageDemo('restart')">Restart</button>
                 <button class="btn btn-secondary" onclick="manageDemo('stop')">Stop</button>
                 <button class="btn btn-danger" onclick="confirmReset()">Reset</button>
+                <button class="btn btn-secondary" onclick="window.location.href='/admin/demos/'+demoId+'/edit'">Edit</button>
+                <button class="btn btn-secondary" onclick="duplicateDemo()">Duplicate</button>
                 <button class="btn btn-danger" onclick="manageDemo('delete')">Delete</button>
             </div>
         </div>
+
+        <div class="card" style="margin-top: 16px; display: none;" id="consoleCard">
+            <h3>Live Console</h3>
+            <div class="console-container">
+                <div class="console-header terminal-header">
+                    <span class="terminal-path" id="consolePath">demo@minddemo ~/$</span>
+                    <span>
+                        <span class="status-dot pending" id="consoleStatusDot"></span>
+                        <span id="consoleStatusLabel">Starting...</span>
+                    </span>
+                </div>
+                <div class="console-output" id="consoleOutput"></div>
+            </div>
+        </div>
+
+        <div class="card" style="margin-top: 16px; display: none;" id="setupProgressCard">
+            <h3 id="setupTitle">Setting up demo environment</h3>
+            <div class="setup-progress">
+                <ul class="setup-step-list" id="setupStepList"></ul>
+            </div>
+        </div>
+
         <div class="card" style="margin-top: 16px;">
-            <h3>Activity Logs</h3>
-            <div style="max-height: 300px; overflow-y: auto; font-family: 'Fira Code', monospace; font-size: 12px;" id="logs-container">
-                Loading logs...
+            <div class="card-head">
+                <h3 style="margin: 0;">Active sessions &amp; resources</h3>
+                <button class="btn btn-sm btn-outline" onclick="refreshSessions()">Refresh</button>
+            </div>
+            <div id="sessionsContainer" class="sessions-list">
+                <p class="muted">Loading&hellip;</p>
+            </div>
+        </div>
+
+        <div class="card" style="margin-top: 16px;">
+            <div class="card-head">
+                <h3 style="margin: 0;">Environment variables</h3>
+                <span class="muted" id="envCount"></span>
+            </div>
+            <div id="envContainer">
+                <p class="muted">Loading&hellip;</p>
+            </div>
+        </div>
+
+        <div class="card" style="margin-top: 16px;">
+            <div class="card-head">
+                <h3 style="margin: 0;">Demo logs</h3>
+                <div class="toolbar">
+                    <button class="btn btn-sm btn-secondary" onclick="downloadLogs()">Download</button>
+                    <button class="btn btn-sm btn-danger" onclick="clearLogs()">Clear</button>
+                </div>
+            </div>
+            <div id="demoLogsContainer" class="logs-list">
+                <p class="muted">Loading&hellip;</p>
             </div>
         </div>
     </main>
     <script>
     const demoId = window.location.pathname.match(/\/demos\/(\d+)/)?.[1];
-    
+    const SETUP_STEPS = [
+        { id: 'prepare', label: 'Preparing environment', match: /Setting up demo environment/i },
+        { id: 'env', label: 'Loading environment variables', match: /Environment variables loaded/i },
+        { id: 'session', label: 'Creating demo session', match: /Demo session created/i },
+        { id: 'image', label: 'Building demo image', match: /Demo image ready/i },
+        { id: 'port', label: 'Allocating host port', match: /Allocating port/i },
+        { id: 'container', label: 'Creating Docker container', match: /Creating Docker container/i },
+        { id: 'start', label: 'Starting container', match: /Container started/i },
+        { id: 'wait', label: 'Waiting for application', match: /Waiting for application/i },
+        { id: 'ready', label: 'Application is ready', match: /Application is ready/i }
+    ];
+
+    const CSRF = <%- safeJson(csrfToken) %>;
+    let currentSessionToken = null;
+    let lastContainerLogsLength = 0;
+    let pollInterval = null;
+    let healthInterval = null;
+
     async function loadDemo() {
         const res = await fetch(`/api/admin/demos/${demoId}`, { credentials: 'include' });
         const demo = await res.json();
@@ -77,23 +153,243 @@
         document.getElementById('demo-timeout').textContent = demo.timeout_minutes;
         const url = `${window.location.origin}/demo/${demo.slug}`;
         document.getElementById('demo-url').textContent = url;
+        renderEnvVars(demo.env_vars);
+
+        try {
+            const sres = await fetch(`/api/admin/demos/${demoId}/sessions`, { credentials: 'include' });
+            const sessions = await sres.json();
+            const rows = Array.isArray(sessions) ? sessions : (sessions && sessions.sessions ? sessions.sessions : []);
+            const active = rows.filter(s => s.status === 'active');
+            document.getElementById('demo-session-count').textContent = `Sessions: ${active.length}`;
+            if (rows.length) {
+                const last = rows.map(s => new Date(s.last_activity)).reduce((a, b) => (b > a ? b : a));
+                document.getElementById('demo-activity').textContent = last.toLocaleString();
+            } else {
+                document.getElementById('demo-activity').textContent = '-';
+            }
+
+            if (active.length > 0 && demo.status === 'running') {
+                if (!currentSessionToken) {
+                    currentSessionToken = active[0].session_token;
+                    // Attach to an already-running session: show only the live
+                    // console, not the setup progress (it is already ready).
+                    startPolling({ resume: true });
+                }
+            } else if (demo.status !== 'running') {
+                stopPolling();
+                currentSessionToken = null;
+            }
+        } catch (e) {
+            document.getElementById('demo-session-count').textContent = 'Sessions: 0';
+            document.getElementById('demo-activity').textContent = '-';
+        }
     }
-    
-    async function loadLogs() {
-        const res = await fetch(`/api/admin/demos/${demoId}/logs`, { credentials: 'include' });
-        const logs = await res.json();
-        const container = document.getElementById('logs-container');
-        container.innerHTML = logs.map(l => `<div>[${l.created_at}] ${l.level.toUpperCase()}: ${l.message}</div>`).join('');
-    }
-    
+
     async function manageDemo(action) {
-        const csrf = '<%= csrfToken %>';
-        await fetch(`/api/admin/demos/${demoId}/${action}`, {
+        const csrf = <%- safeJson(csrfToken) %>;
+        const res = await fetch(`/api/admin/demos/${demoId}/${action}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
             credentials: 'include'
         });
+        const data = await res.json().catch(() => ({}));
+
+        if (action === 'stop' || action === 'reset') {
+            stopPolling();
+            currentSessionToken = null;
+        }
+
+        if ((action === 'start' || action === 'restart') && data.sessionToken) {
+            currentSessionToken = data.sessionToken;
+            lastContainerLogsLength = 0;
+            document.getElementById('consoleOutput').innerHTML = '';
+            renderSetupSteps();
+            startPolling();
+        }
+
+        if (action === 'delete') {
+            window.location.href = '/admin/demos';
+            return;
+        }
+
         loadDemo();
+    }
+
+    function renderSetupSteps() {
+        const list = document.getElementById('setupStepList');
+        if (!list) return;
+        list.innerHTML = SETUP_STEPS.map(function(step) {
+            return '<li class="setup-step pending" id="step-' + step.id + '">' +
+                '<span class="step-icon">○</span>' +
+                '<span class="step-content">' +
+                '<div class="step-label">' + step.label + '</div>' +
+                '</span>' +
+                '</li>';
+        }).join('');
+    }
+
+    async function renderSetupLogs(logs) {
+        const list = document.getElementById('setupStepList');
+        if (!list || !logs.length) return;
+
+        const seenSteps = [];
+        logs.forEach(function(log) {
+            SETUP_STEPS.forEach(function(step) {
+                if (step.match.test(log.message)) {
+                    seenSteps.push(step.id);
+                }
+            });
+        });
+
+        const isError = logs.some(function(l) { return l.level === 'error' || /fail/i.test(l.message); });
+
+        SETUP_STEPS.forEach(function(step) {
+            const el = document.getElementById('step-' + step.id);
+            if (!el) return;
+            el.className = 'setup-step pending';
+            const icon = el.querySelector('.step-icon');
+
+            if (seenSteps.includes(step.id)) {
+                el.className = 'setup-step completed';
+                if (icon) icon.textContent = '✓';
+            } else {
+                const prevIndex = SETUP_STEPS.findIndex(function(s) { return s.id === step.id; });
+                const hasPrevCompleted = prevIndex > 0 && seenSteps.includes(SETUP_STEPS[prevIndex - 1].id);
+                if (hasPrevCompleted && !seenSteps.includes(step.id)) {
+                    el.className = 'setup-step active';
+                    if (icon) icon.innerHTML = '<span class="spinner"></span>';
+                } else {
+                    el.className = 'setup-step pending';
+                    if (icon) icon.textContent = '○';
+                }
+            }
+        });
+
+        if (isError) {
+            document.getElementById('setupTitle').textContent = 'Setup encountered an error';
+        } else {
+            const lastLog = logs[logs.length - 1];
+            document.getElementById('setupTitle').textContent = lastLog ? lastLog.message : 'Waiting for demo to start...';
+        }
+    }
+
+    function appendContainerLogs(logText) {
+        const output = document.getElementById('consoleOutput');
+        if (!output) return;
+        if (logText.length > lastContainerLogsLength) {
+            const newText = logText.substring(lastContainerLogsLength);
+            const time = new Date().toLocaleTimeString();
+            const lines = newText.split('\n').filter(function(l) { return l.trim(); });
+            lines.forEach(function(line) {
+                const div = document.createElement('div');
+                div.className = 'console-line';
+                div.innerHTML = '<span class="timestamp">[' + time + ']</span> ' + escapeHtml(line);
+                output.appendChild(div);
+            });
+            output.scrollTop = output.scrollHeight;
+            lastContainerLogsLength = logText.length;
+        }
+    }
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    function updateConsoleStatus(ready, label) {
+        const dot = document.getElementById('consoleStatusDot');
+        const lbl = document.getElementById('consoleStatusLabel');
+        if (dot) {
+            dot.className = 'status-dot ' + (ready ? 'ready' : 'pending');
+        }
+        if (lbl) lbl.textContent = label;
+    }
+
+    function startPolling(opts) {
+        opts = opts || {};
+        if (pollInterval) clearInterval(pollInterval);
+        if (healthInterval) clearInterval(healthInterval);
+
+        const setupCard = document.getElementById('setupProgressCard');
+        const consoleCard = document.getElementById('consoleCard');
+        if (consoleCard) consoleCard.style.display = '';
+        // When resuming an already-running demo, skip the setup checklist.
+        if (setupCard) setupCard.style.display = opts.resume ? 'none' : '';
+
+        updateConsoleStatus(false, opts.resume ? 'Checking...' : 'Starting...');
+
+        pollLogs();
+        pollHealth();
+
+        pollInterval = setInterval(pollLogs, 3000);
+        healthInterval = setInterval(pollHealth, 2000);
+    }
+
+    function stopPolling() {
+        if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+        if (healthInterval) { clearInterval(healthInterval); healthInterval = null; }
+        const setupCard = document.getElementById('setupProgressCard');
+        if (setupCard) setupCard.style.display = 'none';
+        const consoleCard = document.getElementById('consoleCard');
+        if (consoleCard) consoleCard.style.display = 'none';
+    }
+
+    async function pollLogs() {
+        if (!currentSessionToken) return;
+
+        try {
+            const logsRes = await fetch(`/api/session/${currentSessionToken}/logs`, { credentials: 'include' });
+            if (logsRes.ok) {
+                const logs = await logsRes.json();
+                renderSetupLogs(logs);
+            }
+        } catch (e) {}
+
+        try {
+            const containerRes = await fetch(`/api/session/${currentSessionToken}/container-logs`, { credentials: 'include' });
+            if (containerRes.ok) {
+                const data = await containerRes.json();
+                if (data.logs) {
+                    appendContainerLogs(data.logs);
+                    if (data.ready !== false) {
+                        updateConsoleStatus(true, 'Container running');
+                    }
+                } else if (data.containerStopped) {
+                    updateConsoleStatus(false, 'Container stopped');
+                }
+            }
+        } catch (e) {}
+    }
+
+    async function pollHealth() {
+        if (!currentSessionToken) return;
+
+        try {
+            const res = await fetch(`/api/session/${currentSessionToken}/health`, { credentials: 'include' });
+            if (res.ok) {
+                const data = await res.json();
+                if (data.healthy) {
+                    updateConsoleStatus(true, 'Running');
+                    // Ready: the setup checklist is no longer relevant.
+                    const setupCard = document.getElementById('setupProgressCard');
+                    if (setupCard) setupCard.style.display = 'none';
+                } else {
+                    if (data.containerStopped) {
+                        updateConsoleStatus(false, 'Container stopped');
+                    } else {
+                        updateConsoleStatus(false, 'Starting...');
+                    }
+                }
+            } else if (res.status === 404) {
+                // Session was reaped (no polling/heartbeat). Reset the UI and
+                // refresh so the status reflects reality.
+                stopPolling();
+                currentSessionToken = null;
+                updateConsoleStatus(false, 'Session ended');
+                loadDemo();
+            }
+        } catch (e) {}
     }
 
     function confirmReset() {
@@ -101,14 +397,200 @@
             manageDemo('reset');
         }
     }
-    
+
     function copyUrl() {
         navigator.clipboard.writeText(document.getElementById('demo-url').textContent);
     }
-    
+
+    function openUrl() {
+        const url = (document.getElementById('demo-url').textContent || '').trim();
+        if (url && url !== '/') {
+            window.open(url, '_blank', 'noopener');
+        }
+    }
+
+    function formatBytes(b) {
+        if (!b) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.min(sizes.length - 1, Math.floor(Math.log(b) / Math.log(k)));
+        return (b / Math.pow(k, i)).toFixed(1) + ' ' + sizes[i];
+    }
+
+    function renderSession(s) {
+        const st = s.stats || {};
+        const cpuPct = st.cpu_percent || 0;
+        const memPct = st.memory_percent || 0;
+        const started = s.started_at ? new Date(s.started_at).toLocaleString() : '-';
+        const token = escapeHtml(String(s.session_token || '').slice(0, 16));
+        return '' +
+            '<div class="session-item">' +
+                '<div class="session-head">' +
+                    '<span class="tag tag-blue">' + (s.container_port ? ':' + s.container_port : 'no port') + '</span>' +
+                    '<code class="session-token">' + token + '&hellip;</code>' +
+                    '<span class="status-badge ' + (s.running ? 'status-running' : 'status-stopped') + '">' +
+                        (s.running ? 'running' : 'no container') + '</span>' +
+                    '<button class="btn btn-sm btn-danger" style="margin-left:auto;" onclick="endSession(' + s.id + ')">End session</button>' +
+                '</div>' +
+                '<div class="stat-grid">' +
+                    '<div class="stat"><span class="stat-label">CPU</span><span class="stat-value">' + cpuPct + '%</span>' +
+                        '<div class="meter"><div class="meter-fill" style="width:' + Math.min(cpuPct, 100) + '%"></div></div></div>' +
+                    '<div class="stat"><span class="stat-label">Memory</span><span class="stat-value">' +
+                        formatBytes(st.memory_usage) + ' / ' + formatBytes(st.memory_limit) + '</span>' +
+                        '<div class="meter"><div class="meter-fill" style="width:' + Math.min(memPct, 100) + '%"></div></div></div>' +
+                    '<div class="stat"><span class="stat-label">Network</span><span class="stat-value">&darr; ' +
+                        formatBytes(st.network_rx) + ' &middot; &uarr; ' + formatBytes(st.network_tx) + '</span></div>' +
+                    '<div class="stat"><span class="stat-label">Started</span><span class="stat-value">' + started + '</span></div>' +
+                '</div>' +
+            '</div>';
+    }
+
+    async function refreshSessions() {
+        const box = document.getElementById('sessionsContainer');
+        if (!box) return;
+        try {
+            const res = await fetch(`/api/admin/demos/${demoId}/stats`, { credentials: 'include' });
+            const data = await res.json();
+            const sessions = (data && data.sessions) || [];
+            if (!sessions.length) {
+                box.innerHTML = '<p class="muted">No active sessions.</p>';
+                return;
+            }
+            box.innerHTML = sessions.map(renderSession).join('');
+        } catch (e) {
+            box.innerHTML = '<p class="muted">Failed to load sessions.</p>';
+        }
+    }
+
+    async function endSession(sessionId) {
+        if (!confirm('End this session and remove its container?')) return;
+        const res = await fetch(`/api/admin/demos/${demoId}/sessions/${sessionId}/end`, {
+            method: 'POST',
+            headers: { 'X-CSRF-Token': CSRF },
+            credentials: 'include'
+        });
+        if (res.ok) {
+            refreshSessions();
+            loadDemo();
+        } else {
+            alert('Failed to end session');
+        }
+    }
+
+    function renderEnvVars(vars) {
+        const box = document.getElementById('envContainer');
+        const count = document.getElementById('envCount');
+        if (!box) return;
+        const list = Array.isArray(vars) ? vars : [];
+        window.__envVars = list;
+        if (count) count.textContent = list.length + ' variabele(n)';
+        if (!list.length) {
+            box.innerHTML = '<p class="muted">No environment variables configured.</p>';
+            return;
+        }
+        box.innerHTML = '<table class="env-table"><tbody>' + list.map(function(v, i) {
+            const isSecret = v.is_secret === 1 || v.is_secret === true || v.is_secret === '1';
+            const raw = v.value == null ? '' : String(v.value);
+            const cell = isSecret
+                ? '<span class="secret" id="env-val-' + i + '">&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;</span>' +
+                  ' <button class="btn btn-xs btn-outline" id="env-btn-' + i + '" onclick="toggleSecret(' + i + ')">show</button>'
+                : escapeHtml(raw);
+            return '<tr><td class="env-key">' + escapeHtml(v.key) + '</td><td class="env-value">' + cell + '</td></tr>';
+        }).join('') + '</tbody></table>';
+    }
+
+    function toggleSecret(i) {
+        const el = document.getElementById('env-val-' + i);
+        const btn = document.getElementById('env-btn-' + i);
+        const v = (window.__envVars || [])[i];
+        if (!el || !v) return;
+        const raw = v.value == null ? '' : String(v.value);
+        if (el.dataset.revealed === '1') {
+            el.textContent = '••••••••';
+            el.dataset.revealed = '0';
+            if (btn) btn.textContent = 'show';
+        } else {
+            el.textContent = raw;
+            el.dataset.revealed = '1';
+            if (btn) btn.textContent = 'hide';
+        }
+    }
+
+    async function loadDemoLogs() {
+        const box = document.getElementById('demoLogsContainer');
+        if (!box) return;
+        try {
+            const res = await fetch(`/api/admin/demos/${demoId}/logs`, { credentials: 'include' });
+            const logs = await res.json();
+            const list = (Array.isArray(logs) ? logs : []).slice(0, 50);
+            if (!list.length) {
+                box.innerHTML = '<p class="muted">No logs yet.</p>';
+                return;
+            }
+            box.innerHTML = list.map(function(l) {
+                return '<div class="log-row log-' + l.level + '">' +
+                    '<span class="log-time">' + new Date(l.created_at).toLocaleString() + '</span>' +
+                    '<span class="log-level">' + l.level + '</span>' +
+                    '<span class="log-msg">' + escapeHtml(l.message) + '</span></div>';
+            }).join('');
+        } catch (e) {
+            box.innerHTML = '<p class="muted">Failed to load logs.</p>';
+        }
+    }
+
+    async function downloadLogs() {
+        const res = await fetch(`/api/admin/demos/${demoId}/logs`, { credentials: 'include' });
+        const logs = await res.json();
+        const text = (Array.isArray(logs) ? logs : []).map(function(l) {
+            return l.created_at + ' [' + l.level + ']: ' + l.message;
+        }).join('\n');
+        const blob = new Blob([text || 'No logs'], { type: 'text/plain' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'demo-' + demoId + '-logs.txt';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(a.href);
+    }
+
+    async function clearLogs() {
+        if (!confirm('Clear all logs for this demo?')) return;
+        const res = await fetch(`/api/admin/demos/${demoId}/logs`, {
+            method: 'DELETE',
+            headers: { 'X-CSRF-Token': CSRF },
+            credentials: 'include'
+        });
+        if (res.ok) {
+            loadDemoLogs();
+        } else {
+            alert('Failed to clear logs');
+        }
+    }
+
+    async function duplicateDemo() {
+        const name = prompt('Naam voor de kopie (leeg = automatisch):', '');
+        if (name === null) return;
+        const res = await fetch(`/api/admin/demos/${demoId}/duplicate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
+            credentials: 'include',
+            body: JSON.stringify({ name: name || undefined })
+        });
+        const data = await res.json().catch(function() { return {}; });
+        if (res.ok && data.demo) {
+            window.location.href = '/admin/demos/' + data.demo.id;
+        } else {
+            alert(data.error || 'Failed to duplicate demo');
+        }
+    }
+
     loadDemo();
-    loadLogs();
-    setInterval(loadDemo, 10000);
+    loadDemoLogs();
+    refreshSessions();
+    setInterval(loadDemo, 15000);
+    setInterval(loadDemoLogs, 15000);
+    setInterval(refreshSessions, 5000);
     </script>
 </body>
 </html>

@@ -5,12 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Demos - MindDemo</title>
     <link rel="stylesheet" href="/css/style.css">
+    <link rel="icon" type="image/png" href="/img/favicon.png">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
 </head>
-<body class="admin-page">
-    <div class="sidebar">
+    <body class="admin-page">
+    <input type="checkbox" id="navToggle" class="nav-toggle" hidden>
+        <div class="sidebar">
         <div class="sidebar-header">
-            <span class="logo">MindDemo</span>
+            <a href="/admin/dashboard" class="logo"><img src="/img/logo.png" alt="MindDevelopment logo" class="logo-img"><span>MindDemo</span></a>
         </div>
         <nav class="sidebar-nav">
             <a href="/admin/dashboard" class="nav-link">Dashboard</a>
@@ -26,6 +28,7 @@
     </div>
     <main class="main-content">
         <header class="top-bar">
+            <label class="menu-btn" for="navToggle" aria-label="Toggle navigation">☰</label>
             <div class="user-info">
                 <span>Admin: <%= username %></span>
             </div>
@@ -37,6 +40,7 @@
         </div>
 
         <div class="card">
+            <div class="table-wrap">
             <table class="table">
                 <thead>
                     <tr>
@@ -54,24 +58,26 @@
                         <td><a href="/admin/demos/<%= demo.id %>"><%= demo.name %></a></td>
                         <td><span style="color: var(--text-secondary);"><%= demo.slug %></span></td>
                         <td><span class="status-badge status-<%= demo.status %>"><%= demo.status.toUpperCase() %></span></td>
-                        <td>-</td>
+                        <td><%= (sessionCounts && sessionCounts[demo.id]) || 0 %></td>
                         <td><span style="color: var(--text-secondary);"><%= new Date(demo.created_at).toLocaleDateString() %></span></td>
                         <td>
                             <button class="btn btn-sm btn-secondary" onclick="startDemo(<%= demo.id %>)" <%= demo.status === 'running' ? 'disabled' : '' %>>Start</button>
                             <button class="btn btn-sm btn-secondary" onclick="stopDemo(<%= demo.id %>)" <%= demo.status !== 'running' ? 'disabled' : '' %>>Stop</button>
+                            <a href="/admin/demos/<%= demo.id %>/edit" class="btn btn-sm btn-secondary">Edit</a>
                             <button class="btn btn-sm btn-danger" onclick="deleteDemo(<%= demo.id %>)">Delete</button>
                         </td>
                     </tr>
                     <% }); %>
                 </tbody>
             </table>
+            </div>
         </div>
     </main>
     <script>
     async function startDemo(id) {
         await fetch(`/api/admin/demos/${id}/start`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': '<%= csrfToken %>' },
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': <%- safeJson(csrfToken) %> },
             credentials: 'include'
         });
         location.reload();
@@ -79,7 +85,7 @@
     async function stopDemo(id) {
         await fetch(`/api/admin/demos/${id}/stop`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': '<%= csrfToken %>' },
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': <%- safeJson(csrfToken) %> },
             credentials: 'include'
         });
         location.reload();
@@ -88,7 +94,7 @@
         if (!confirm('Are you sure? This will delete the demo permanently.')) return;
         await fetch(`/api/admin/demos/${id}`, {
             method: 'DELETE',
-            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': '<%= csrfToken %>' },
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': <%- safeJson(csrfToken) %> },
             credentials: 'include'
         });
         location.href = '/admin/demos';
