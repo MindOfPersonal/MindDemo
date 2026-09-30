@@ -57,6 +57,16 @@
                     </div>
                 </div>
                 <div class="form-group">
+                    <label for="server_id">Server</label>
+                    <select id="server_id" name="server_id">
+                        <option value="">Local (this MindDemo host)</option>
+                        <% (servers || []).forEach(function(s) { %>
+                        <option value="<%= s.id %>"><%= s.name %><%= s.status ? ' (' + s.status + ')' : '' %></option>
+                        <% }); %>
+                    </select>
+                    <div class="meta" style="margin-top:6px;">Run this demo on an agent server, or keep it local.</div>
+                </div>
+                <div class="form-group">
                     <label for="project_archive">Project Archive (ZIP) *</label>
                     <input type="file" id="project_archive" name="project" accept=".zip" required>
                 </div>

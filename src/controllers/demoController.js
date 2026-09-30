@@ -8,7 +8,9 @@ const DemoLog = require('../models/DemoLog');
 const DemoSession = require('../models/DemoSession');
 const DemoEnvironment = require('../models/DemoEnvironment');
 const dockerService = require('../services/dockerService');
+const runtime = require('../services/runtime');
 const discordEvents = require('../services/discordEvents');
+const Server = require('../models/Server');
 const { prepareSession } = require('../controllers/sessionController');
 const logger = require('../utils/logger');
 const config = require('../config');
@@ -30,6 +32,27 @@ const upload = multer({
 function isSensitiveEnvKey(key) {
   const lower = key.toLowerCase();
   return ['password', 'secret', 'token', 'apikey', 'api_key', 'credential', 'private_key'].some(p => lower.includes(p));
+}
+
+// Normalize the optional server selection from a form. Empty means "run
+// locally" (null). A non-empty value must reference an existing agent server.
+async function resolveServerId(raw) {
+  if (raw === undefined || raw === null) return undefined;
+  const value = String(raw).trim();
+  if (value === '' || value === '0' || value === 'local') return null;
+  const id = Number(value);
+  if (!Number.isInteger(id) || id <= 0) {
+    const err = new Error('Invalid server selected');
+    err.status = 400;
+    throw err;
+  }
+  const server = await Server.findById(id);
+  if (!server) {
+    const err = new Error('Selected server does not exist');
+    err.status = 400;
+    throw err;
+  }
+  return id;
 }
 
 // A session that is still being created (no container yet) may be reused, but
@@ -79,7 +102,7 @@ async function createDemo(req, res) {
   try {
     const { name, slug, description, start_command, install_command, build_command, 
             timeout_minutes, env_vars, demo_username, demo_email, demo_password,
-            show_credentials, banner_enabled, landing_page } = req.body;
+            show_credentials, banner_enabled, landing_page, server_id } = req.body;
 
     let projectPath = '';
     let baselinePath = '';
@@ -87,6 +110,8 @@ async function createDemo(req, res) {
     if (!req.file) {
       return res.status(400).json({ error: 'ZIP file is required' });
     }
+
+    const serverId = await resolveServerId(server_id);
 
     const requestedSlug = slug && String(slug).trim() ? generateSlug(String(slug)) : '';
     const slugValue = requestedSlug || generateUniqueSlug(name);
@@ -119,7 +144,8 @@ async function createDemo(req, res) {
       demo_password,
       show_credentials,
       banner_enabled,
-      landing_page
+      landing_page,
+      server_id: serverId
     });
 
     if (env_vars) {
@@ -181,7 +207,7 @@ async function createDemo(req, res) {
       fs.rmSync(baselinePath, { recursive: true, force: true });
     }
     try { fs.unlinkSync(req.file.path); } catch { /* already removed */ }
-    res.status(500).json({ error: err.message || 'Failed to create demo' });
+    res.status(err.status || 500).json({ error: err.message || 'Failed to create demo' });
   }
 }
 
@@ -194,13 +220,29 @@ async function updateDemo(req, res) {
 
     const { name, slug, description, start_command, install_command, build_command,
             timeout_minutes, env_vars, demo_username, demo_email, demo_password,
-            show_credentials, banner_enabled, landing_page } = req.body;
+            show_credentials, banner_enabled, landing_page, server_id } = req.body;
+
+    const nextServerId = await resolveServerId(server_id);
+    const serverChanged = nextServerId !== undefined &&
+      String(nextServerId || '') !== String(demo.server_id || '');
+
+    // Moving a demo between hosts invalidates its running containers/sessions:
+    // stop them on the old host before switching.
+    if (serverChanged) {
+      try {
+        await runtime.stopAllForDemo(demo);
+      } catch (stopErr) {
+        logger.warn(`Failed to stop demo ${demo.id} on old server: ${stopErr.message}`);
+      }
+      await DemoSession.endAllForDemo(demo.id);
+    }
 
     await Demo.update(demo.id, {
       name, slug, description, start_command, install_command, build_command,
       timeout_minutes, demo_username, demo_email, demo_password,
       show_credentials, banner_enabled: banner_enabled ? 1 : 0, 
-      landing_page: landing_page ? 1 : 0
+      landing_page: landing_page ? 1 : 0,
+      server_id: nextServerId
     });
 
     // Replace the demo's environment variables. They may arrive as an array of
@@ -261,6 +303,7 @@ async function updateDemo(req, res) {
     if (timeout_minutes !== undefined && String(timeout_minutes) !== String(demo.timeout_minutes)) changed.push('timeout');
     if (envList.length) changed.push(`${envList.length} env var(s)`);
     if (commandsChanged) changed.push('image herbouwd');
+    if (serverChanged) changed.push('server');
     const details = changed.length ? changed.join(', ') : 'geen veldwijzigingen';
 
     discordEvents.demoUpdated(req, demo, details);
@@ -268,6 +311,9 @@ async function updateDemo(req, res) {
     res.json({ message: 'Demo updated successfully' });
   } catch (err) {
     logger.error('Update demo error:', err);
+    if (err.status) {
+      return res.status(err.status).json({ error: err.message });
+    }
     res.status(500).json({ error: 'Failed to update demo' });
   }
 }
@@ -589,7 +635,8 @@ async function duplicateDemo(req, res) {
       demo_password: demo.demo_password,
       show_credentials: demo.show_credentials,
       banner_enabled: demo.banner_enabled,
-      landing_page: demo.landing_page
+      landing_page: demo.landing_page,
+      server_id: demo.server_id
     });
 
     const envRows = await DemoEnvironment.getByDemoId(demo.id);

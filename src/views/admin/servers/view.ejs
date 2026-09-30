@@ -38,6 +38,7 @@
                 <h2 id="serverName" style="margin:0;font-size:20px;">Server</h2>
                 <div class="toolbar">
                     <button class="btn btn-sm btn-outline" onclick="testServer()">Test</button>
+                    <button class="btn btn-sm btn-outline" onclick="regenerateToken()">Regenerate token</button>
                     <button class="btn btn-sm btn-danger" onclick="removeServer()">Delete</button>
                     <a href="/admin/servers" class="btn btn-sm btn-secondary">&larr; Back</a>
                 </div>
@@ -49,6 +50,18 @@
                 <div class="stat"><span class="stat-label">Last seen</span><span class="stat-value" id="lastSeen">-</span></div>
             </div>
             <p class="muted" id="controlUrl" style="margin-top:12px;"></p>
+        </div>
+
+        <div class="card" style="margin-top:16px;">
+            <div class="card-head">
+                <h3 style="margin:0;">Agent installer</h3>
+                <div class="toolbar">
+                    <span class="muted" id="agentVersionLabel">Loading&hellip;</span>
+                    <a class="btn btn-sm btn-primary" href="/api/admin/agent/download">Download latest (.tar.gz)</a>
+                </div>
+            </div>
+            <p class="muted">Run this on the server. The agent token is only shown once, when the server is created.</p>
+            <pre class="code-block" id="agentInstallCommand">Loading&hellip;</pre>
         </div>
 
         <div class="card" style="margin-top:16px;">
@@ -107,6 +120,33 @@
                 : '<p class="muted">No commands yet.</p>';
         }
 
+        let agentControlUrl='';
+        async function loadAgentRelease(){
+            const versionEl=document.getElementById('agentVersionLabel');
+            const cmdEl=document.getElementById('agentInstallCommand');
+            try{
+                const res=await fetch('/api/admin/agent/release',{credentials:'include'});
+                const data=await res.json();
+                if(!res.ok) throw new Error(data.error||'Failed to load agent release');
+                versionEl.textContent='Latest: v'+data.version;
+                agentControlUrl=data.control_url||'';
+                cmdEl.textContent=data.install_command;
+            }catch(e){
+                versionEl.textContent='';
+                cmdEl.textContent='Could not load the agent release: '+e.message;
+            }
+        }
+        async function regenerateToken(){
+            if(!confirm('Generate a new token? The current agent token stops working immediately.'))return;
+            const res=await fetch('/api/admin/servers/'+serverId+'/token',{method:'POST',headers:{'X-CSRF-Token':CSRF},credentials:'include'});
+            const data=await res.json().catch(()=>({}));
+            if(!res.ok){alert(data.error||'Failed to regenerate token');return;}
+            const base=window.location.origin;
+            const cmd='curl -fsSL '+base+'/agent/install.sh -o /tmp/mindagent-install.sh\n'+
+                'sudo bash /tmp/mindagent-install.sh --control '+agentControlUrl+' --token '+data.token+' --yes';
+            document.getElementById('agentInstallCommand').textContent=cmd;
+            alert('New token (shown once):\n\n'+data.token+'\n\nThe install command below has been updated.');
+        }
         async function testServer(){
             const res=await fetch('/api/admin/servers/'+serverId+'/test',{method:'POST',headers:{'X-CSRF-Token':CSRF},credentials:'include'});
             const data=await res.json().catch(()=>({}));
@@ -118,6 +158,7 @@
             if(res.ok)window.location.href='/admin/servers';else alert('Failed to remove server');
         }
         load();
+        loadAgentRelease();
         setInterval(load,10000);
     </script>
 </body>

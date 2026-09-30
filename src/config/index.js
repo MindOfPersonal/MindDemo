@@ -33,7 +33,12 @@ module.exports = {
     COMMAND_TIMEOUT_MS: parseInt(process.env.AGENT_COMMAND_TIMEOUT_MS || '60000'),
     IMAGE_PUSH_MAX_MB: parseInt(process.env.AGENT_IMAGE_PUSH_MAX_MB || '2000'),
     RELEASE_URL: process.env.AGENT_RELEASE_URL || 'https://get.minddevelopment.nl/agent',
-    OFFLINE_AFTER_SECONDS: parseInt(process.env.AGENT_OFFLINE_AFTER_SECONDS || '45')
+    OFFLINE_AFTER_SECONDS: parseInt(process.env.AGENT_OFFLINE_AFTER_SECONDS || '45'),
+    // Directory holding the MindDemo-agent source on the MindDemo host. The
+    // admin dashboard packages it into a downloadable tarball and a public
+    // release feed so private-repo access is no longer needed on target
+    // servers. Defaults to the sibling checkout of this repository.
+    SOURCE_DIR: process.env.AGENT_SOURCE_DIR || path.resolve(__dirname, '..', '..', '..', 'MindDemo-agent')
   },
   DISCORD: {
     // The webhook is only active when a URL is configured and it is not

@@ -60,6 +60,7 @@
     </main>
     <script>
         const CSRF = <%- safeJson(csrfToken) %>;
+        const APP_URL = <%- safeJson(appUrl || '') %>;
         document.getElementById('serverForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const body = Object.fromEntries(new FormData(e.target).entries());
@@ -73,9 +74,9 @@
             if (!res.ok) { alert(data.error || 'Failed to create server'); return; }
             document.getElementById('tokenValue').textContent = data.token;
             document.getElementById('installBlock').textContent =
-                'curl -fsSL https://get.minddevelopment.nl/agent/install.sh -o install.sh\n' +
-                'less install.sh\n' +
-                'sudo bash install.sh --control ' + (body.control_url || '') + ' --token ' + data.token + ' --yes';
+                'curl -fsSL ' + APP_URL + '/agent/install.sh -o /tmp/mindagent-install.sh\n' +
+                'less /tmp/mindagent-install.sh\n' +
+                'sudo bash /tmp/mindagent-install.sh --control ' + (body.control_url || '') + ' --token ' + data.token + ' --yes';
             document.getElementById('goToServer').href = '/admin/servers/' + data.server.id;
             document.getElementById('tokenBox').style.display = '';
             document.getElementById('serverForm').style.display = 'none';

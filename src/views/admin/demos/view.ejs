@@ -55,6 +55,7 @@
                 </div>
             </div>
             <div style="margin-top: 16px;">
+                <p><strong>Server:</strong> <span id="demo-server">-</span></p>
                 <p><strong>Created:</strong> <span id="demo-created">-</span></p>
                 <p><strong>Last Activity:</strong> <span id="demo-activity">-</span></p>
                 <p><strong>Timeout:</strong> <span id="demo-timeout">-</span> minutes</p>
@@ -139,6 +140,7 @@
     ];
 
     const CSRF = <%- safeJson(csrfToken) %>;
+    const SERVERS = <%- safeJson((servers || []).reduce(function(acc, s) { acc[String(s.id)] = s.name; return acc; }, {})) %>;
     let currentSessionToken = null;
     let lastContainerLogsLength = 0;
     let pollInterval = null;
@@ -150,6 +152,9 @@
         document.getElementById('demo-name').textContent = demo.name;
         document.getElementById('demo-status').textContent = demo.status.toUpperCase();
         document.getElementById('demo-status').className = `status-badge status-${demo.status}`;
+        document.getElementById('demo-server').textContent = demo.server_id
+            ? (SERVERS[String(demo.server_id)] || ('#' + demo.server_id))
+            : 'Local';
         document.getElementById('demo-created').textContent = new Date(demo.created_at).toLocaleString();
         document.getElementById('demo-timeout').textContent = demo.timeout_minutes;
         const url = `${window.location.origin}/demo/${demo.slug}`;

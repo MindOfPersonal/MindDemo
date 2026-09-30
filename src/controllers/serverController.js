@@ -102,6 +102,21 @@ async function remove(req, res) {
   }
 }
 
+async function regenerateToken(req, res) {
+  try {
+    const server = await Server.findById(req.params.id);
+    if (!server) return res.status(404).json({ error: 'Server not found' });
+    const token = Server.generateToken();
+    await Server.updateToken(server.id, token);
+    logger.info(`Agent token regenerated for server ${server.id} (${server.name})`);
+    // Returned exactly once; only the hash is stored.
+    res.json({ message: 'Token regenerated', token });
+  } catch (err) {
+    logger.error('Regenerate token error:', err);
+    res.status(500).json({ error: 'Failed to regenerate token' });
+  }
+}
+
 async function test(req, res) {
   try {
     const server = await Server.findById(req.params.id);
@@ -141,17 +156,15 @@ async function installScript(req, res) {
     const server = await Server.findById(req.params.id);
     if (!server) return res.status(404).json({ error: 'Server not found' });
     const token = (req.body && req.body.token) || '<AGENT_TOKEN>';
-    const controlUrl = (req.body && req.body.control_url) || `${require('../config').APP_URL.replace(/^http/, 'ws')}/agent/ws`;
+    const cfg = require('../config');
+    const base = cfg.APP_URL.replace(/\/$/, '');
+    const controlUrl = (req.body && req.body.control_url) || `${cfg.APP_URL.replace(/^http/, 'ws')}/agent/ws`;
     const script = [
       '# Run these commands as root on the target server.',
-      '# 1) Get the agent code onto the server (pick one):',
-      '#    git clone https://github.com/MindOfPersonal/MindDemo-agent.git /tmp/minddemo-agent',
-      '#    # or copy the folder from the MindDemo host:',
-      '#    scp -r /root/projecten/Dev/MindDemo-agent root@<server>:/tmp/minddemo-agent',
-      '',
-      '# 2) Run the installer (it installs Node and Docker if missing):',
-      'cd /tmp/minddemo-agent',
-      `sudo bash install.sh --control ${controlUrl} --token ${token} --yes`
+      '# MindDemo hosts the agent, so no access to the private repository is needed.',
+      `curl -fsSL ${base}/agent/install.sh -o /tmp/mindagent-install.sh`,
+      'less /tmp/mindagent-install.sh   # always read before running',
+      `sudo bash /tmp/mindagent-install.sh --control ${controlUrl} --token ${token} --yes`
     ].join('\n');
     res.type('text/plain').send(script);
   } catch (err) {
@@ -160,4 +173,4 @@ async function installScript(req, res) {
   }
 }
 
-module.exports = { list, get, create, update, remove, test, metrics, logs, installScript };
+module.exports = { list, get, create, update, remove, test, regenerateToken, metrics, logs, installScript };

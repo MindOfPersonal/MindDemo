@@ -61,6 +61,16 @@
                     </div>
                 </div>
                 <div class="form-group">
+                    <label for="server_id">Server</label>
+                    <select id="server_id" name="server_id">
+                        <option value="" <%= !demo.server_id ? 'selected' : '' %>>Local (this MindDemo host)</option>
+                        <% (servers || []).forEach(function(s) { %>
+                        <option value="<%= s.id %>" <%= String(demo.server_id) === String(s.id) ? 'selected' : '' %>><%= s.name %><%= s.status ? ' (' + s.status + ')' : '' %></option>
+                        <% }); %>
+                    </select>
+                    <div class="meta" style="margin-top:6px;">Changing the server stops running sessions for this demo.</div>
+                </div>
+                <div class="form-group">
                     <label for="install_command">Install Command</label>
                     <input type="text" id="install_command" name="install_command" value="<%= demo.install_command || '' %>" placeholder="npm install">
                 </div>
@@ -192,6 +202,7 @@
                     show_credentials: f.show_credentials.value,
                     banner_enabled: f.banner_enabled.checked,
                     landing_page: f.landing_page.checked,
+                    server_id: f.server_id.value,
                     env_vars: collectEnv()
                 };
                 const response = await fetch('/api/admin/demos/' + demoId, {

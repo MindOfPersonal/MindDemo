@@ -21,7 +21,8 @@ class Demo {
       landing_page,
       demo_username,
       demo_email,
-      demo_password
+      demo_password,
+      server_id
     } = data;
 
     const finalSlug = slug || generateUniqueSlug(name);
@@ -30,12 +31,12 @@ class Demo {
       `INSERT INTO demos 
        (name, slug, description, project_path, baseline_path, status, start_command, 
         install_command, build_command, internal_port, timeout_minutes, env_vars,
-        demo_username, demo_email, demo_password, show_credentials, banner_enabled, landing_page)
-       VALUES (?, ?, ?, ?, ?, 'stopped', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        demo_username, demo_email, demo_password, show_credentials, banner_enabled, landing_page, server_id)
+       VALUES (?, ?, ?, ?, ?, 'stopped', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
        [name, finalSlug, description || null, project_path, baseline_path, start_command || 'npm start',
        install_command || null, build_command || null, internal_port, timeout_minutes,
        JSON.stringify(env_vars || {}), demo_username || null, demo_email || null, demo_password || null,
-       show_credentials || 'auto', banner_enabled ? 1 : 0, landing_page ? 1 : 0]
+       show_credentials || 'auto', banner_enabled ? 1 : 0, landing_page ? 1 : 0, server_id || null]
     );
 
     logger.info(`Demo created: ${name} (slug: ${finalSlug}, id: ${result.insertId})`);
@@ -61,7 +62,7 @@ class Demo {
       'name', 'slug', 'description', 'start_command', 'install_command',
       'build_command', 'internal_port', 'timeout_minutes', 'env_vars',
       'demo_username', 'demo_email', 'demo_password', 'show_credentials',
-      'banner_enabled', 'landing_page', 'status'
+      'banner_enabled', 'landing_page', 'status', 'server_id'
     ]);
     const fields = [];
     const values = [];

@@ -40,6 +40,7 @@
             <a href="/admin/demos/create" class="btn btn-primary">Create Demo</a>
         </div>
 
+        <% const serverNames = {}; (servers || []).forEach(function(s) { serverNames[s.id] = s.name; }); %>
         <div class="card">
             <div class="table-wrap">
             <table class="table">
@@ -48,6 +49,7 @@
                         <th>Name</th>
                         <th>Slug</th>
                         <th>Status</th>
+                        <th>Server</th>
                         <th>Sessions</th>
                         <th>Created</th>
                         <th>Actions</th>
@@ -59,6 +61,7 @@
                         <td><a href="/admin/demos/<%= demo.id %>"><%= demo.name %></a></td>
                         <td><span style="color: var(--text-secondary);"><%= demo.slug %></span></td>
                         <td><span class="status-badge status-<%= demo.status %>"><%= demo.status.toUpperCase() %></span></td>
+                        <td><%= demo.server_id ? (serverNames[demo.server_id] || ('#' + demo.server_id)) : 'Local' %></td>
                         <td><%= (sessionCounts && sessionCounts[demo.id]) || 0 %></td>
                         <td><span style="color: var(--text-secondary);"><%= new Date(demo.created_at).toLocaleDateString() %></span></td>
                         <td>

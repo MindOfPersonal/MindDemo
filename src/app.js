@@ -97,6 +97,13 @@ app.use('/api/session', sessionLimiter(), sessionRoutes);
 // Agent-facing endpoints use a bearer token, not a browser session or CSRF.
 app.use('/api/agent', require('./routes/agentApi'));
 
+// Public agent release distribution: install.sh, releases.json and the tarball.
+// Served by MindDemo itself so external servers never need the private repo.
+app.use('/agent', require('./routes/agentRelease'));
+
+// Admin-only view of the same release (version info + authenticated download).
+app.use('/api/admin/agent', authRequired, require('./routes/agentAdmin').router);
+
 app.post('/api/admin/discord/test', authRequired, (req, res) => {
   if (!discordService.isEnabled()) {
     return res.status(400).json({ error: 'Discord webhook is not configured or disabled' });
@@ -125,7 +132,9 @@ app.get('/admin/demos', authRequired, async (req, res) => {
   try {
     const Demo = require('./models/Demo');
     const DemoSession = require('./models/DemoSession');
+    const Server = require('./models/Server');
     const demos = await Demo.findAll();
+    const servers = await Server.findAll();
     let sessionCount = 0;
     const sessionCounts = {};
     for (const d of demos) {
@@ -136,6 +145,7 @@ app.get('/admin/demos', authRequired, async (req, res) => {
     res.render('admin/demos', { 
       title: 'Demos', 
       demos, 
+      servers,
       username: req.session.username,
       csrfToken: req.session.csrfToken,
       sessionCount,
@@ -147,19 +157,25 @@ app.get('/admin/demos', authRequired, async (req, res) => {
   }
 });
 
-app.get('/admin/demos/create', authRequired, (req, res) => {
+app.get('/admin/demos/create', authRequired, async (req, res) => {
+  const Server = require('./models/Server');
+  const servers = await Server.findAll();
   res.render('admin/demos/create', {
     title: 'Create Demo',
     csrfToken: req.session.csrfToken,
-    username: req.session.username
+    username: req.session.username,
+    servers
   });
 });
 
-app.get('/admin/demos/:id', authRequired, (req, res) => {
+app.get('/admin/demos/:id', authRequired, async (req, res) => {
+  const Server = require('./models/Server');
+  const servers = await Server.findAll();
   res.render('admin/demos/view', { 
     title: 'View Demo', 
-    csrfToken: req.session.csrfToken,
-    username: req.session.username
+    csrfToken: req.session.csrfToken, 
+    username: req.session.username,
+    servers
   });
 });
 
@@ -167,16 +183,19 @@ app.get('/admin/demos/:id/edit', authRequired, async (req, res) => {
   try {
     const Demo = require('./models/Demo');
     const DemoEnvironment = require('./models/DemoEnvironment');
+    const Server = require('./models/Server');
     const demo = await Demo.findById(req.params.id);
     if (!demo) {
       return res.redirect('/admin/demos');
     }
     const envVars = await DemoEnvironment.getByDemoId(demo.id);
+    const servers = await Server.findAll();
     res.render('admin/demos/edit', {
       title: 'Edit Demo',
       csrfToken: req.session.csrfToken,
       demo,
       envVars,
+      servers,
       username: req.session.username
     });
   } catch (err) {
@@ -223,7 +242,8 @@ app.get('/admin/servers', authRequired, (req, res) => {
   res.render('admin/servers', {
     title: 'Servers',
     csrfToken: req.session.csrfToken,
-    username: req.session.username
+    username: req.session.username,
+    appUrl: config.APP_URL.replace(/\/$/, '')
   });
 });
 
@@ -232,7 +252,8 @@ app.get('/admin/servers/new', authRequired, (req, res) => {
     title: 'Add Server',
     csrfToken: req.session.csrfToken,
     username: req.session.username,
-    controlUrl: config.APP_URL.replace(/^http/, 'ws') + '/agent/ws'
+    controlUrl: config.APP_URL.replace(/^http/, 'ws') + '/agent/ws',
+    appUrl: config.APP_URL.replace(/\/$/, '')
   });
 });
 
@@ -241,7 +262,8 @@ app.get('/admin/servers/:id', authRequired, (req, res) => {
     title: 'Server',
     csrfToken: req.session.csrfToken,
     username: req.session.username,
-    serverId: req.params.id
+    serverId: req.params.id,
+    appUrl: config.APP_URL.replace(/\/$/, '')
   });
 });
 

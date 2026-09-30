@@ -32,6 +32,19 @@
             <label class="menu-btn" for="navToggle" aria-label="Toggle navigation">☰</label>
             <div class="user-info"><span>Admin: <%= username || 'Admin' %></span></div>
         </header>
+        <div class="card" style="margin-bottom:16px;">
+            <div class="card-head">
+                <h2 style="margin:0;font-size:20px;">MindAgent</h2>
+                <div class="toolbar">
+                    <span class="muted" id="agentVersion">Loading&hellip;</span>
+                    <a class="btn btn-sm btn-primary" href="/api/admin/agent/download">Download latest (.tar.gz)</a>
+                </div>
+            </div>
+            <p class="muted">Install the agent on a server. MindDemo hosts the latest build, so the private repository is not needed on the target server.</p>
+            <pre class="code-block" id="agentCommand">Loading&hellip;</pre>
+            <button class="btn btn-sm btn-secondary" onclick="copyCommand()">Copy install command</button>
+            <a class="btn btn-sm btn-outline" href="/agent/install.sh" target="_blank" rel="noopener">View install.sh</a>
+        </div>
         <div class="card">
             <div class="card-head">
                 <h2 style="margin:0;font-size:20px;">Servers</h2>
@@ -42,7 +55,32 @@
     </main>
     <script>
         const CSRF = <%- safeJson(csrfToken) %>;
+        const APP_URL = <%- safeJson(appUrl || '') %>;
+        let agentCommand = '';
         function esc(s){const d=document.createElement('div');d.textContent=s==null?'':s;return d.innerHTML;}
+        async function loadAgentRelease(){
+            const versionEl=document.getElementById('agentVersion');
+            const cmdEl=document.getElementById('agentCommand');
+            try{
+                const res=await fetch('/api/admin/agent/release',{credentials:'include'});
+                const data=await res.json();
+                if(!res.ok) throw new Error(data.error||'Failed to load agent release');
+                versionEl.textContent='Latest: v'+data.version;
+                agentCommand=data.install_command;
+                cmdEl.textContent=agentCommand;
+            }catch(e){
+                versionEl.textContent='';
+                cmdEl.textContent='Could not load the agent release: '+e.message;
+            }
+        }
+        function copyCommand(){
+            if(!agentCommand) return;
+            navigator.clipboard.writeText(agentCommand).then(
+                ()=>alert('Install command copied to clipboard'),
+                ()=>alert('Copy failed; select the text manually')
+            );
+        }
+        loadAgentRelease();
         function statusClass(s){return ['online','offline','updating','error','degraded','maintenance'].includes(s)?s:'unknown';}
         async function loadServers(){
             const box=document.getElementById('serversContainer');
