@@ -362,6 +362,8 @@
                     }
                 } else if (data.containerStopped) {
                     updateConsoleStatus(false, 'Container stopped');
+                    stopPolling();
+                    currentSessionToken = null;
                 }
             }
         } catch (e) {}

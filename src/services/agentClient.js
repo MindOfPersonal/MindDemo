@@ -64,7 +64,7 @@ function pushImage(server, demo) {
       return reject(Object.assign(new Error('No push token for agent'), { code: 'AGENT_OFFLINE' }));
     }
     if (!server.server_url) {
-      return reject(new Error('Server has no server_url configured'));
+      return reject(new Error('Agent server has no Server URL configured. Open the server page and set the URL where the agent is reachable (e.g. http://<server-ip>:3060).'));
     }
 
     let imageStream;

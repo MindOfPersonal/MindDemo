@@ -62,7 +62,9 @@ async function isContainerRunning(session) {
 async function proxyTarget(session, demo) {
   if (session && session.server_id) {
     const server = await loadServer(session.server_id);
-    if (!server.server_url) throw new Error('Agent server has no server_url');
+    if (!server.server_url) {
+      throw new Error('Agent server has no Server URL configured. Open the server page and set the URL where the agent is reachable (e.g. http://<server-ip>:3060).');
+    }
     return `${server.server_url.replace(/\/$/, '')}/demo/${demo.slug}/live`;
   }
   return `http://127.0.0.1:${session.container_port}`;
@@ -89,10 +91,17 @@ async function stopAllForDemo(demo) {
 
 async function getContainerLogs(session) {
   if (session && session.server_id) {
-    const server = await loadServer(session.server_id);
-    const demo = await Demo.findById(session.demo_id);
-    const result = await agentClient.demoLogs(server, demo);
-    return result.logs || '';
+    try {
+      const server = await loadServer(session.server_id);
+      const demo = await Demo.findById(session.demo_id);
+      const result = await agentClient.demoLogs(server, demo);
+      return result.logs || '';
+    } catch (err) {
+      // A stopped/reaped remote demo has no mapping; treat that as "no logs"
+      // rather than surfacing an error on every console poll.
+      logger.debug(`Remote container logs unavailable: ${err.message}`);
+      return '';
+    }
   }
   return dockerService.getContainerLogs(session.container_id);
 }

@@ -39,7 +39,11 @@
 
             <form id="serverForm" class="form">
                 <div class="form-group"><label for="name">Name</label><input id="name" name="name" required placeholder="mind-2"></div>
-                <div class="form-group"><label for="server_url">Server URL</label><input id="server_url" name="server_url" placeholder="https://agent-2.minddevelopment.nl"></div>
+                <div class="form-group">
+                    <label for="server_url">Server URL</label>
+                    <input id="server_url" name="server_url" placeholder="http://<agent-ip>:3060">
+                    <div class="meta" style="margin-top:6px;">Required to run demos here: MindDemo pushes images and forwards visitor traffic to this URL. Must be reachable from the MindDemo host.</div>
+                </div>
                 <div class="form-group"><label for="control_url">Control URL</label><input id="control_url" name="control_url" value="<%= controlUrl %>"></div>
                 <div class="form-group"><label for="notes">Notes</label><textarea id="notes" name="notes" rows="3"></textarea></div>
                 <button type="submit" class="btn btn-primary">Create server</button>

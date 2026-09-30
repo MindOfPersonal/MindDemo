@@ -53,6 +53,24 @@
 
         <div class="card" style="margin-top:16px;">
             <div class="card-head">
+                <h3 style="margin:0;">Server settings</h3>
+                <button class="btn btn-sm btn-primary" onclick="saveServer()">Save</button>
+            </div>
+            <div id="serverUrlWarning" class="banner" style="display:none;border-color:var(--warning);">
+                <strong>Server URL is missing.</strong>
+                Without it MindDemo cannot push images to the agent or forward visitor traffic, so remote demos fail to start. Set the URL where the agent is reachable (e.g. <code>http://&lt;server-ip&gt;:3060</code> or <code>https://agent-2.example.com</code>).
+            </div>
+            <div class="form">
+                <div class="form-group"><label for="edit_name">Name</label><input id="edit_name"></div>
+                <div class="form-group"><label for="edit_server_url">Server URL</label><input id="edit_server_url" placeholder="http://<agent-ip>:3060"></div>
+                <div class="form-group"><label for="edit_control_url">Control URL</label><input id="edit_control_url"></div>
+                <div class="form-group"><label for="edit_notes">Notes</label><textarea id="edit_notes" rows="3"></textarea></div>
+            </div>
+            <p class="muted">The agent must be reachable at the Server URL. By default the agent binds <code>127.0.0.1</code>; set <code>MINDAGENT_BIND=0.0.0.0</code> in <code>/etc/mindagent/agent.env</code> and restart the service, or put it behind a reverse proxy.</p>
+        </div>
+
+        <div class="card" style="margin-top:16px;">
+            <div class="card-head">
                 <h3 style="margin:0;">Agent installer</h3>
                 <div class="toolbar">
                     <span class="muted" id="agentVersionLabel">Loading&hellip;</span>
@@ -84,6 +102,7 @@
         function esc(s){const d=document.createElement('div');d.textContent=s==null?'':s;return d.innerHTML;}
         function fmtBytesMb(mb){return mb?mb+' MB':'-';}
         function statusClass(s){return ['online','offline','updating','error','degraded','maintenance'].includes(s)?s:'unknown';}
+        let settingsLoaded=false;
 
         async function load(){
             const res = await fetch('/api/admin/servers/'+serverId,{credentials:'include'});
@@ -95,7 +114,15 @@
             document.getElementById('agentVersion').textContent = s.agent_version||'-';
             document.getElementById('dockerVersion').textContent = s.docker_version||'-';
             document.getElementById('lastSeen').textContent = s.last_seen?new Date(s.last_seen).toLocaleString():'-';
-            document.getElementById('controlUrl').textContent = 'Control URL: '+(s.control_url||'-');
+            document.getElementById('controlUrl').textContent = 'Control URL: '+(s.control_url||'-')+'  ·  Server URL: '+(s.server_url||'(not set)');
+            document.getElementById('serverUrlWarning').style.display = s.server_url ? 'none' : '';
+            if(!settingsLoaded){
+                document.getElementById('edit_name').value = s.name||'';
+                document.getElementById('edit_server_url').value = s.server_url||'';
+                document.getElementById('edit_control_url').value = s.control_url||'';
+                document.getElementById('edit_notes').value = s.notes||'';
+                settingsLoaded = true;
+            }
 
             const m = (data.metrics&&data.metrics[0])||null;
             document.getElementById('metricsBox').innerHTML = m ?
@@ -145,6 +172,20 @@
                 'sudo bash /tmp/mindagent-install.sh --control '+agentControlUrl+' --token '+data.token+' --yes';
             document.getElementById('agentInstallCommand').textContent=cmd;
             alert('New token (shown once):\n\n'+data.token+'\n\nThe install command below has been updated.');
+        }
+        async function saveServer(){
+            const body={
+                name: document.getElementById('edit_name').value,
+                server_url: document.getElementById('edit_server_url').value,
+                control_url: document.getElementById('edit_control_url').value,
+                notes: document.getElementById('edit_notes').value
+            };
+            const res=await fetch('/api/admin/servers/'+serverId,{method:'PUT',headers:{'Content-Type':'application/json','X-CSRF-Token':CSRF},credentials:'include',body:JSON.stringify(body)});
+            const data=await res.json().catch(()=>({}));
+            if(!res.ok){alert(data.error||'Failed to save server');return;}
+            settingsLoaded=false;
+            await load();
+            alert('Server settings saved');
         }
         async function testServer(){
             const res=await fetch('/api/admin/servers/'+serverId+'/test',{method:'POST',headers:{'X-CSRF-Token':CSRF},credentials:'include'});

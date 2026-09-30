@@ -331,6 +331,10 @@ async function getContainerLogs(req, res) {
       await DemoSession.updateActivity(session.id);
     }
 
+    if (session.status === 'stopped') {
+      return res.json({ logs: '', ready: false, containerStopped: true });
+    }
+
     if (!session.container_id) {
       return res.json({ logs: '', ready: false });
     }
