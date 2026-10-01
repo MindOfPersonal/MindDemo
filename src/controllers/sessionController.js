@@ -19,6 +19,10 @@ const httpTimeout = (url, ms = 2000) => new Promise((resolve) => {
 async function logStep(demoId, sessionId, message, level = 'info') {
   try {
     await DemoLog.add({ demo_id: demoId, session_id: sessionId, level, message });
+    // Setting up (image build, image push, container start) can outlast the
+    // inactivity timeout; treat each setup step as activity so a slow build is
+    // never reaped while it is still making progress.
+    if (sessionId) await DemoSession.updateActivity(sessionId);
   } catch (err) {
     logger.debug('Failed to log step:', err.message);
   }
@@ -46,7 +50,7 @@ async function setupContainer(sessionId, demo) {
     await runtime.ensureImage(demo);
     await logStep(demo.id, sessionId, 'Demo image ready');
     await logStep(demo.id, sessionId, 'Starting container on remote agent...');
-    const started = await runtime.startContainer({ demo, envVars, createdBy: 'session' });
+    const started = await runtime.startContainer({ demo, envVars, createdBy: 'session', sessionId });
     await DemoSession.updateContainerInfo(sessionId, {
       container_id: started.containerId,
       container_port: started.containerPort
@@ -238,7 +242,7 @@ async function heartbeat(req, res) {
     }
 
     if (!isAdminRequest(req)) {
-      await DemoSession.updateActivity(session.id);
+      await DemoSession.touch(session.id);
     }
     
     res.json({ 
@@ -248,6 +252,28 @@ async function heartbeat(req, res) {
     });
   } catch (err) {
     logger.error('Heartbeat error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+// Explicit visitor activity (mouse/keyboard/touch inside the preview). Only
+// this resets the inactivity timer; plain polling keeps the session "seen" but
+// lets an idle tab expire on schedule.
+async function touchSession(req, res) {
+  try {
+    const session = await DemoSession.findByToken(req.params.session_token);
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+    if (session.status === 'stopped') {
+      return res.json({ status: 'stopped', ended: true });
+    }
+    if (!isAdminRequest(req)) {
+      await DemoSession.updateActivity(session.id);
+    }
+    res.json({ status: session.status, message: 'Activity recorded' });
+  } catch (err) {
+    logger.error('Touch session error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -328,11 +354,11 @@ async function getContainerLogs(req, res) {
     }
 
     if (session.status !== 'stopped' && !isAdminRequest(req)) {
-      await DemoSession.updateActivity(session.id);
+      await DemoSession.touch(session.id);
     }
 
     if (session.status === 'stopped') {
-      return res.json({ logs: '', ready: false, containerStopped: true });
+      return res.json({ logs: '', ready: false, containerStopped: true, ended: true });
     }
 
     if (!session.container_id) {
@@ -360,7 +386,7 @@ async function getSessionLogs(req, res) {
     }
 
     if (session.status !== 'stopped' && !isAdminRequest(req)) {
-      await DemoSession.updateActivity(session.id);
+      await DemoSession.touch(session.id);
     }
 
     const logs = await DemoLog.getBySessionId(session.id, 500);
@@ -378,11 +404,17 @@ async function checkSessionHealth(req, res) {
       return res.status(404).json({ error: 'Session not found' });
     }
 
-    // Polling from an open visitor landing page keeps the session alive; when
-    // the page is closed the polls stop and the cleanup worker reaps it
-    // shortly. Admin console polling is excluded from the inactivity timer.
-    if (session.status !== 'stopped' && !isAdminRequest(req)) {
-      await DemoSession.updateActivity(session.id);
+    // A stopped session is terminal: tell the visitor so the landing page can
+    // return to the "Start" state instead of polling a dead session forever.
+    if (session.status === 'stopped') {
+      return res.json({ healthy: false, ready: false, status: 'stopped', ended: true });
+    }
+
+    // Polling from an open visitor landing page marks the page as present but
+    // must not reset the inactivity timer (only real interaction does), so an
+    // idle-but-open tab still expires. Admin console polling is excluded.
+    if (!isAdminRequest(req)) {
+      await DemoSession.touch(session.id);
     }
 
     if (!session.container_id || !session.container_port) {
@@ -425,6 +457,7 @@ module.exports = {
   prepareSession,
   setupContainer,
   heartbeat,
+  touchSession,
   endSession,
   getSession,
   getContainerLogs,

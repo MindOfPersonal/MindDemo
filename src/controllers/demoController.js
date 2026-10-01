@@ -183,6 +183,13 @@ async function createDemo(req, res) {
         installCommand: install_command,
         buildCommand: build_command
       });
+      // For remote demos also warm the agent's image cache in the background,
+      // so the first visitor only waits for the container start, not a push.
+      if (demo.server_id) {
+        runtime.ensureImage(demo).catch((pushErr) => {
+          logger.warn(`Background image push for demo ${demo.id} failed: ${pushErr.message}`);
+        });
+      }
     } catch (buildErr) {
       logger.warn(`Initial image build failed for demo ${demo.id}: ${buildErr.message}`);
       await DemoLog.add({
@@ -235,6 +242,12 @@ async function updateDemo(req, res) {
         logger.warn(`Failed to stop demo ${demo.id} on old server: ${stopErr.message}`);
       }
       await DemoSession.endAllForDemo(demo.id);
+      // Warm the new host so the first visitor does not wait for the image.
+      if (nextServerId) {
+        runtime.ensureImage({ ...demo, server_id: nextServerId }).catch((pushErr) => {
+          logger.warn(`Background image push for demo ${demo.id} failed: ${pushErr.message}`);
+        });
+      }
     }
 
     await Demo.update(demo.id, {
@@ -280,7 +293,7 @@ async function updateDemo(req, res) {
       (build_command || '') !== (demo.build_command || '');
 
     if (commandsChanged) {
-      await dockerService.stopAllDemoContainers(demo.id);
+      await runtime.stopAllForDemo(demo);
       await DemoSession.endAllForDemo(demo.id);
       try {
         await dockerService.buildImage({
@@ -289,6 +302,14 @@ async function updateDemo(req, res) {
           installCommand: install_command,
           buildCommand: build_command
         });
+        // Push to whichever server the demo now targets (the in-memory object
+        // still holds the pre-update server_id).
+        const targetServerId = nextServerId !== undefined ? nextServerId : demo.server_id;
+        if (targetServerId) {
+          runtime.ensureImage({ ...demo, server_id: targetServerId }).catch((pushErr) => {
+            logger.warn(`Background image push for demo ${demo.id} failed: ${pushErr.message}`);
+          });
+        }
       } catch (buildErr) {
         logger.warn(`Image rebuild failed for demo ${demo.id}: ${buildErr.message}`);
       }
@@ -325,7 +346,7 @@ async function deleteDemo(req, res) {
       return res.status(404).json({ error: 'Demo not found' });
     }
 
-    await dockerService.stopAllDemoContainers(demo.id);
+    await runtime.stopAllForDemo(demo);
     await dockerService.removeImage(demo.id);
     
     const projectPath = demo.project_path;
@@ -365,7 +386,7 @@ async function startDemo(req, res) {
     const existingSessions = await DemoSession.findActiveByDemoId(demo.id);
     let reuseSession = null;
     for (const s of existingSessions) {
-      if (s.container_id && await dockerService.isContainerRunning(s.container_id)) {
+      if (s.container_id && await runtime.isContainerRunning(s)) {
         reuseSession = s;
         break;
       }
@@ -416,7 +437,7 @@ async function stopDemo(req, res) {
       return res.status(404).json({ error: 'Demo not found' });
     }
 
-    await dockerService.stopAllDemoContainers(demo.id);
+    await runtime.stopAllForDemo(demo);
     await DemoSession.endAllForDemo(demo.id);
     await Demo.updateStatus(demo.id, 'stopped');
     await DemoLog.add({ demo_id: demo.id, level: 'info', message: 'Demo stopped by admin' });
@@ -437,7 +458,7 @@ async function restartDemo(req, res) {
       return res.status(404).json({ error: 'Demo not found' });
     }
 
-    await dockerService.stopAllDemoContainers(demo.id);
+    await runtime.stopAllForDemo(demo);
     await DemoSession.endAllForDemo(demo.id);
     await Demo.updateStatus(demo.id, 'running');
     await DemoLog.add({ demo_id: demo.id, level: 'info', message: 'Demo restarted by admin' });
@@ -477,7 +498,7 @@ async function resetDemo(req, res) {
       return res.status(404).json({ error: 'Demo not found' });
     }
 
-    await dockerService.stopAllDemoContainers(demo.id);
+    await runtime.stopAllForDemo(demo);
     await DemoSession.endAllForDemo(demo.id);
     await DemoLog.add({ demo_id: demo.id, level: 'info', message: 'Demo reset by admin - all sessions destroyed' });
 
@@ -534,9 +555,9 @@ async function getDemoStats(req, res) {
       let running = false;
       let stats = null;
       if (s.container_id) {
-        running = await dockerService.isContainerRunning(s.container_id);
+        running = await runtime.isContainerRunning(s);
         if (running) {
-          stats = await dockerService.getContainerStats(s.container_id);
+          stats = await runtime.getContainerStats(s);
         }
       }
       result.push({
@@ -572,7 +593,7 @@ async function endDemoSession(req, res) {
 
     await DemoSession.end(session.id);
     if (session.container_id) {
-      await dockerService.removeContainer(session.container_id);
+      await runtime.removeContainer(session);
     }
 
     const remaining = await DemoSession.findActiveByDemoId(demo.id);
@@ -652,6 +673,11 @@ async function duplicateDemo(req, res) {
         installCommand: demo.install_command,
         buildCommand: demo.build_command
       });
+      if (created.server_id) {
+        runtime.ensureImage(created).catch((pushErr) => {
+          logger.warn(`Background image push for duplicated demo ${created.id} failed: ${pushErr.message}`);
+        });
+      }
     } catch (buildErr) {
       logger.warn(`Initial image build failed for duplicated demo ${created.id}: ${buildErr.message}`);
     }
@@ -715,7 +741,7 @@ async function publicStartDemo(req, res) {
     const existingSessions = await DemoSession.findActiveByDemoId(demo.id);
     let reuseSession = null;
     for (const s of existingSessions) {
-      if (s.container_id && await dockerService.isContainerRunning(s.container_id)) {
+      if (s.container_id && await runtime.isContainerRunning(s)) {
         reuseSession = s;
         break;
       }
@@ -766,7 +792,7 @@ async function publicStopDemo(req, res) {
       return res.status(404).json({ error: 'Demo not found' });
     }
 
-    await dockerService.stopAllDemoContainers(demo.id);
+    await runtime.stopAllForDemo(demo);
     await DemoSession.endAllForDemo(demo.id);
     await Demo.updateStatus(demo.id, 'stopped');
     await DemoLog.add({ demo_id: demo.id, level: 'info', message: 'Demo stopped by visitor' });
@@ -787,7 +813,7 @@ async function publicResetDemo(req, res) {
       return res.status(404).json({ error: 'Demo not found' });
     }
 
-    await dockerService.stopAllDemoContainers(demo.id);
+    await runtime.stopAllForDemo(demo);
     await DemoSession.endAllForDemo(demo.id);
     await DemoLog.add({ demo_id: demo.id, level: 'info', message: 'Demo reset by visitor - active session destroyed' });
 

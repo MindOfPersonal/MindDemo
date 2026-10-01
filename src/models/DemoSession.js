@@ -26,7 +26,16 @@ class DemoSession {
 
   static async updateActivity(id) {
     await db.query(
-      'UPDATE demo_sessions SET last_activity = NOW() WHERE id = ?',
+      'UPDATE demo_sessions SET last_activity = NOW(), last_seen = NOW() WHERE id = ?',
+      [id]
+    );
+  }
+
+  // Presence only: the visitor's page is still polling. Does NOT reset the
+  // inactivity timer, so an open-but-idle tab still expires.
+  static async touch(id) {
+    await db.query(
+      'UPDATE demo_sessions SET last_seen = NOW() WHERE id = ?',
       [id]
     );
   }
@@ -81,15 +90,18 @@ class DemoSession {
     return rows[0] ? rows[0].count : 0;
   }
 
-  // Sessions that stopped sending heartbeats (visitor closed the page). The
-  // grace window is intentionally short so closed tabs free their container
-  // quickly, independent of the longer per-demo inactivity timeout.
+  // Sessions whose page stopped polling (visitor closed the tab). Uses
+  // last_seen, which every presence poll refreshes, so an idle-but-open tab is
+  // not reaped here (it expires via the longer inactivity timeout instead).
+  // Sessions still being set up (no container yet) are exempt: a slow image
+  // build/push must not be killed by the short presence grace.
   static async findStaleSessions(graceSeconds = 60) {
     const seconds = Math.max(1, parseInt(graceSeconds, 10) || 60);
     return db.query(
       `SELECT * FROM demo_sessions
        WHERE status IN ("active", "inactive")
-       AND last_activity < DATE_SUB(NOW(), INTERVAL ${seconds} SECOND)`
+       AND container_id IS NOT NULL
+       AND last_seen < DATE_SUB(NOW(), INTERVAL ${seconds} SECOND)`
     );
   }
 

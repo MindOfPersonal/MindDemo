@@ -315,6 +315,14 @@ app.use((err, req, res, next) => {
   });
 });
 
+// High-frequency command replies that must not be written to demo_logs. The
+// admin console polls `demo.logs` every few seconds; logging each reply buried
+// every meaningful event under thousands of "Agent: demo.logs" rows.
+const NOISY_AGENT_EVENTS = new Set([
+  'demo.logs',
+  'demo.list'
+]);
+
 // React to events agents send us: reflect demo status and surface notable
 // events in the logs and on Discord.
 function handleAgentEvent(server, message) {
@@ -333,7 +341,19 @@ function handleAgentEvent(server, message) {
     } else if (event === 'demo.failed') {
       DemoLog.add({ demo_id: message.demo_id || null, level: 'error', message: `Agent error: ${message.message || event}` }).catch(() => {});
       discordEvents.agentEvent(server, 'demo.failed', message.message);
-    } else if (event && event.startsWith('demo.')) {
+    } else if (event === 'demo.progress') {
+      // Mid-command progress streamed by the agent (port allocation, container
+      // creation, health wait). Log the human-readable step so the landing
+      // page's setup checklist advances in real time.
+      if (message.message) {
+        DemoLog.add({
+          demo_id: message.demo_id || null,
+          session_id: message.session_id || null,
+          level: 'info',
+          message: message.message
+        }).catch(() => {});
+      }
+    } else if (event && event.startsWith('demo.') && !NOISY_AGENT_EVENTS.has(event)) {
       DemoLog.add({ demo_id: message.demo_id || null, level: 'info', message: `Agent: ${event}` }).catch(() => {});
     }
   } catch (err) {

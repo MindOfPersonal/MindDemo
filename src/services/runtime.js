@@ -27,6 +27,23 @@ async function loadServer(serverId) {
 async function ensureImage(demo) {
   if (isRemote(demo)) {
     const server = await loadServer(demo.server_id);
+    // Build locally first (cached by dockerService when the image exists).
+    const tag = await dockerService.ensureImage(demo);
+
+    // Skip the transfer when the agent already holds this exact build. The
+    // image id is content-addressed, so a rebuilt project still gets pushed.
+    const imageId = await dockerService.getImageId(tag);
+    let present = false;
+    try {
+      present = await agentClient.imagePresent(server, demo, imageId);
+    } catch (err) {
+      logger.debug(`Image presence check on ${server.name} failed: ${err.message}`);
+    }
+    if (present) {
+      logger.info(`Image ${tag} already present on ${server.name}; skipping push`);
+      return agentClient.imageTagFor(demo.id);
+    }
+
     await agentClient.pushImage(server, demo);
     return agentClient.imageTagFor(demo.id);
   }
@@ -35,10 +52,10 @@ async function ensureImage(demo) {
 
 // Start a container for a demo. Local keeps the existing dockerService path;
 // remote sends a demo.start command to the agent and returns its mapping.
-async function startContainer({ demo, envVars, createdBy }) {
+async function startContainer({ demo, envVars, createdBy, sessionId }) {
   if (isRemote(demo)) {
     const server = await loadServer(demo.server_id);
-    const result = await agentClient.startDemo(server, demo, { envVars, createdBy });
+    const result = await agentClient.startDemo(server, demo, { envVars, createdBy, sessionId });
     return {
       remote: true,
       containerId: result.container_id,
@@ -52,7 +69,12 @@ async function startContainer({ demo, envVars, createdBy }) {
 async function isContainerRunning(session) {
   if (!session) return false;
   if (session.server_id) {
-    return hub.isConnected(session.server_id) && !!session.container_id;
+    if (!hub.isConnected(session.server_id)) return false;
+    const known = hub.hasDemo(session.server_id, session.demo_id);
+    // Until the agent has reported its running set (first heartbeat after
+    // connect), trust the container id recorded when the command completed.
+    if (known === null) return !!session.container_id;
+    return known;
   }
   return dockerService.isContainerRunning(session.container_id);
 }

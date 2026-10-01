@@ -18,6 +18,7 @@ class AgentHub {
   constructor({ onEvent } = {}) {
     this.connections = new Map(); // serverId -> ws
     this.pushTokens = new Map();  // serverId -> ephemeral image-push token
+    this.demoIds = new Map();     // serverId -> Set<demoId> currently running
     this.pending = new Map();     // commandId -> { resolve, reject, timer, serverId }
     this.wss = null;
     this.monitor = null;
@@ -71,6 +72,7 @@ class AgentHub {
       if (this.connections.get(server.id) === ws) {
         this.connections.delete(server.id);
         this.pushTokens.delete(server.id);
+        this.demoIds.delete(server.id);
         Server.updateStatus(server.id, 'offline').catch(() => {});
         this.onEvent(server, { type: 'agent.event', event: 'agent.disconnected' });
       }
@@ -135,6 +137,12 @@ class AgentHub {
       agent_version: message.agent_version,
       docker_version: docker.version
     });
+    // The agent reports which demo ids it currently runs. Keeping this in
+    // memory lets the control plane answer "is this remote container still
+    // alive?" without an extra round-trip on every health poll.
+    if (message.demos && Array.isArray(message.demos.ids)) {
+      this.demoIds.set(server.id, new Set(message.demos.ids.map(Number)));
+    }
     if (message.resources) {
       await ServerMetric.record(server.id, {
         ...message.resources,
@@ -158,6 +166,20 @@ class AgentHub {
   }
 
   async onAgentEvent(server, message) {
+    // Intermediate progress for a still-running command must NOT resolve the
+    // pending promise; it is forwarded so the UI can follow the setup steps.
+    if (message.event === 'demo.progress') {
+      this.onEvent(server, message);
+      return;
+    }
+
+    // Keep the in-memory running set fresh between heartbeats.
+    if (message.event === 'demo.started' && message.demo_id) {
+      this.addDemo(server.id, message.demo_id);
+    } else if ((message.event === 'demo.stopped' || message.event === 'demo.deleted') && message.demo_id) {
+      this.removeDemo(server.id, message.demo_id);
+    }
+
     const commandId = message.command_id;
     if (commandId) {
       const pending = this.pending.get(commandId);
@@ -182,6 +204,25 @@ class AgentHub {
   isConnected(serverId) {
     const ws = this.connections.get(Number(serverId));
     return !!(ws && ws.readyState === 1);
+  }
+
+  addDemo(serverId, demoId) {
+    const id = Number(serverId);
+    if (!this.demoIds.has(id)) this.demoIds.set(id, new Set());
+    this.demoIds.get(id).add(Number(demoId));
+  }
+
+  removeDemo(serverId, demoId) {
+    const set = this.demoIds.get(Number(serverId));
+    if (set) set.delete(Number(demoId));
+  }
+
+  // Returns true/false when the agent has reported its running set, or null
+  // when it has not reported one yet (so callers can fall back gracefully).
+  hasDemo(serverId, demoId) {
+    const set = this.demoIds.get(Number(serverId));
+    if (!set) return null;
+    return set.has(Number(demoId));
   }
 
   async sendCommand(serverId, type, payload, { timeoutMs = 60000, createdBy = null } = {}) {

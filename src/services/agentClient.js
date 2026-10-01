@@ -111,8 +111,22 @@ function pushImage(server, demo) {
 }
 
 async function startDemo(server, demo, opts = {}) {
-  const payload = { demo: await buildDemoPayload(demo, opts) };
+  const payload = {
+    demo: await buildDemoPayload(demo, opts),
+    session_id: opts.sessionId || null
+  };
   return hub.sendCommand(server.id, 'demo.start', payload, { timeoutMs: 150000, createdBy: opts.createdBy });
+}
+
+// Ask the agent whether it already holds the exact image we built. Returns
+// false on any failure (e.g. an older agent without the command), so the
+// caller falls back to pushing the image.
+async function imagePresent(server, demo, imageId) {
+  const result = await hub.sendCommand(server.id, 'image.exists', {
+    image: imageTagFor(demo.id),
+    image_id: imageId || null
+  }, { timeoutMs: 20000 });
+  return !!(result && result.present);
 }
 
 async function stopDemo(server, demo, opts = {}) {
@@ -132,4 +146,4 @@ async function demoLogs(server, demo, tail = 500) {
   return hub.sendCommand(server.id, 'demo.logs', { demo: { demo_id: demo.id, slug: demo.slug }, tail }, { timeoutMs: 20000 });
 }
 
-module.exports = { buildDemoPayload, pushImage, startDemo, stopDemo, restartDemo, deleteDemo, demoLogs, imageTagFor, parseMemoryMb, parseCpu };
+module.exports = { buildDemoPayload, pushImage, startDemo, imagePresent, stopDemo, restartDemo, deleteDemo, demoLogs, imageTagFor, parseMemoryMb, parseCpu };

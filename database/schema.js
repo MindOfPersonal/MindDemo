@@ -109,9 +109,11 @@ CREATE TABLE IF NOT EXISTS \`demo_sessions\` (
   \`status\` ENUM('active', 'inactive', 'ending', 'stopped') DEFAULT 'active',
   \`started_at\` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   \`last_activity\` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  \`last_seen\` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   \`ended_at\` TIMESTAMP NULL,
   INDEX \`idx_demo_status\` (\`demo_id\`, \`status\`),
   INDEX \`idx_last_activity\` (\`last_activity\`),
+  INDEX \`idx_last_seen\` (\`last_seen\`),
   PRIMARY KEY (\`id\`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -185,6 +187,10 @@ async function migrate() {
   await addColumnIfMissing('demos', 'server_id', 'INT UNSIGNED NULL');
   await addColumnIfMissing('demo_sessions', 'server_id', 'INT UNSIGNED NULL');
   await addColumnIfMissing('demo_sessions', 'agent_command_id', 'VARCHAR(64) NULL');
+  // last_seen tracks page presence (polling) while last_activity tracks real
+  // visitor interaction. Keeping them apart lets an idle-but-open tab expire
+  // on the inactivity timeout instead of being kept alive by its own polls.
+  await addColumnIfMissing('demo_sessions', 'last_seen', 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP');
 }
 
 async function initialize() {

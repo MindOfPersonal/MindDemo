@@ -92,6 +92,19 @@ async function imageExists(tag) {
   }
 }
 
+// Content-addressed id (sha256:...) of a local image, or null if it is absent.
+// Lets us tell an agent to skip an image transfer when it already holds the
+// exact same build.
+async function getImageId(tag) {
+  if (!docker) return null;
+  try {
+    const info = await docker.getImage(tag).inspect();
+    return info && info.Id ? info.Id : null;
+  } catch (err) {
+    return null;
+  }
+}
+
 async function buildImage({ demoId, projectPath, installCommand, buildCommand }) {
   if (!docker) throw new Error('Docker not available');
 
@@ -423,6 +436,7 @@ module.exports = {
   buildImage,
   ensureImage,
   getImageStream,
+  getImageId,
   removeImage,
   createContainer,
   removeContainer,

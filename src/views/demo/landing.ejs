@@ -155,17 +155,50 @@
         let pollInterval = null;
         let healthInterval = null;
         let timerInterval = null;
-        let sessionStartTs = null;
+        let lastActivityTs = null;
         let sessionTimeoutMin = <%- safeJson(demo.timeout_minutes || 30) %>;
         window.previewLoaded = false;
+
+        // Real interaction (mouse/keyboard/touch) resets the inactivity timer.
+        // Plain polling keeps the session "seen" so a closed tab is reaped
+        // quickly, but an open-but-idle tab still expires on schedule.
+        const ACTIVITY_EVENTS = ['mousemove', 'mousedown', 'click', 'keydown', 'scroll', 'touchstart', 'wheel'];
+        const ACTIVITY_PING_MS = 10000;
+        let lastActivityPingTs = 0;
+
+        function markActivity() {
+            lastActivityTs = Date.now();
+            if (!sessionToken) return;
+            const now = Date.now();
+            if (now - lastActivityPingTs < ACTIVITY_PING_MS) return;
+            lastActivityPingTs = now;
+            fetch('/api/session/' + sessionToken + '/activity', {
+                method: 'POST',
+                credentials: 'same-origin'
+            }).catch(function() {});
+        }
+
+        function bindActivity(target) {
+            if (!target || !target.addEventListener) return;
+            ACTIVITY_EVENTS.forEach(function(ev) {
+                target.addEventListener(ev, markActivity, { passive: true, capture: true });
+            });
+        }
+
+        // Parent page + the proxied demo iframe (same origin) both count.
+        bindActivity(window);
+        document.addEventListener('visibilitychange', function() {
+            if (!document.hidden) markActivity();
+        });
 
         function setGlobalStatus(state, text) {
             if (globalStatusDot) globalStatusDot.className = 'status-dot ' + state;
             if (globalStatusText) globalStatusText.textContent = text;
         }
 
-        function startTimer(startedAt) {
-            sessionStartTs = startedAt ? new Date(startedAt).getTime() : Date.now();
+        function startTimer(lastActivity) {
+            const serverTs = lastActivity ? new Date(lastActivity).getTime() : NaN;
+            lastActivityTs = Number.isFinite(serverTs) ? serverTs : Date.now();
             if (sessionTimer) sessionTimer.style.display = '';
             updateTimer();
             if (timerInterval) clearInterval(timerInterval);
@@ -174,14 +207,14 @@
 
         function stopTimer() {
             if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
-            sessionStartTs = null;
+            lastActivityTs = null;
             if (sessionTimer) sessionTimer.style.display = 'none';
         }
 
         function updateTimer() {
-            if (!sessionStartTs || !sessionTimerValue) return;
+            if (!lastActivityTs || !sessionTimerValue) return;
             const total = sessionTimeoutMin * 60 * 1000;
-            const left = total - (Date.now() - sessionStartTs);
+            const left = total - (Date.now() - lastActivityTs);
             if (left <= 0) {
                 sessionTimerValue.textContent = 'expired';
                 return;
@@ -198,7 +231,10 @@
                 if (!res.ok) return;
                 const data = await res.json();
                 if (data.demo && data.demo.timeout_minutes) sessionTimeoutMin = data.demo.timeout_minutes;
-                startTimer(data.session ? data.session.started_at : null);
+                // Anchor the countdown to the last real interaction, not the
+                // session start, so an already-used session shows the correct
+                // time remaining.
+                startTimer(data.session ? (data.session.last_activity || data.session.started_at) : null);
             } catch (e) {}
         }
 
@@ -390,6 +426,20 @@
             } catch (e) {}
         }
 
+        function resetSessionUI(message) {
+            stopConsole();
+            stopTimer();
+            sessionToken = null;
+            window.previewLoaded = false;
+            liveFrame.src = 'about:blank';
+            liveWrap.style.display = 'none';
+            startBtn.style.display = '';
+            stopBtn.style.display = 'none';
+            resetBtn.style.display = 'none';
+            setGlobalStatus('pending', 'Status: stopped');
+            liveStatus.textContent = message || 'Session ended — click Start';
+        }
+
         async function pollHealth() {
             if (!sessionToken) return;
 
@@ -397,6 +447,13 @@
                 const res = await fetch(`/api/session/${sessionToken}/health`, { credentials: 'same-origin' });
                 if (res.ok) {
                     const data = await res.json();
+                    if (data.ended || data.status === 'stopped') {
+                        // The inactivity timer expired and the cleanup worker
+                        // stopped the container. Return to the Start state even
+                        // though the tab is still open.
+                        resetSessionUI('Session expired — click Start');
+                        return;
+                    }
                     if (data.healthy && !window.previewLoaded) {
                         window.previewLoaded = true;
                         updateConsoleState(true, 'Application ready');
@@ -421,17 +478,7 @@
                     }
                 } else if (res.status === 404) {
                     // The session was reaped (e.g. page was idle too long).
-                    stopConsole();
-                    stopTimer();
-                    sessionToken = null;
-                    window.previewLoaded = false;
-                    liveFrame.src = 'about:blank';
-                    liveWrap.style.display = 'none';
-                    startBtn.style.display = '';
-                    stopBtn.style.display = 'none';
-                    resetBtn.style.display = 'none';
-                    setGlobalStatus('pending', 'Status: stopped');
-                    liveStatus.textContent = 'Session ended — click Start';
+                    resetSessionUI('Session ended — click Start');
                 }
             } catch (e) {}
         }
@@ -448,6 +495,8 @@
             sessionToken = r.sessionToken || null;
             lastContainerLogsLength = 0;
             window.previewLoaded = false;
+            lastActivityTs = Date.now();
+            lastActivityPingTs = 0;
 
             startBtn.style.display = 'none';
             stopBtn.style.display = '';
@@ -540,8 +589,19 @@
         if (resetBtn) resetBtn.addEventListener('click', reset);
 
         if (liveFrame) {
-            liveFrame.addEventListener('load', () => { liveStatus.textContent = 'Demo running'; });
+            liveFrame.addEventListener('load', () => {
+                liveStatus.textContent = 'Demo running';
+                // The demo is proxied same-origin, so we can watch interaction
+                // inside it and reset the inactivity timer on real use.
+                try { bindActivity(liveFrame.contentWindow); } catch (e) {}
+            });
             liveFrame.addEventListener('error', () => { liveStatus.textContent = 'Demo unavailable'; });
+        }
+
+        if (fsFrame) {
+            fsFrame.addEventListener('load', () => {
+                try { bindActivity(fsFrame.contentWindow); } catch (e) {}
+            });
         }
 
         // If the demo is already running (e.g. the visitor reloads), attach to
