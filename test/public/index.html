@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Test site</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      margin: 0;
+      background: #f5f5f5;
+      color: #222;
+    }
+    main {
+      background: #fff;
+      padding: 2rem 3rem;
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+      text-align: center;
+    }
+    button {
+      font-size: 1rem;
+      padding: 0.6rem 1.2rem;
+      border: none;
+      border-radius: 8px;
+      background: #2563eb;
+      color: #fff;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #1d4ed8;
+    }
+    #output {
+      margin-top: 1rem;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Hallo test</h1>
+    <p>Klik op de knop om de API te testen.</p>
+    <button id="test">Test API</button>
+    <div id="output"></div>
+  </main>
+
+  <script>
+    document.getElementById('test').addEventListener('click', async () => {
+      const output = document.getElementById('output');
+      output.textContent = 'Laden...';
+      try {
+        const res = await fetch('/api/hello');
+        const data = await res.json();
+        output.textContent = data.message + ' (' + data.time + ')';
+      } catch (err) {
+        output.textContent = 'Fout: ' + err.message;
+      }
+    });
+  </script>
+</body>
+</html>
