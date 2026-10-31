@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= title || 'Error' %> - MindDemo</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body class="error-page">
+    <div class="container">
+        <div class="error-card">
+            <h1><%= error_code || 500 %></h1>
+            <p class="error-message"><%= message || 'An unexpected error occurred' %></p>
+            <a href="/" class="btn btn-secondary">Go Home</a>
+        </div>
+    </div>
+</body>
+</html>

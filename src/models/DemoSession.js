@@ -1,0 +1,113 @@
+const db = require('../config/database');
+const logger = require('../utils/logger');
+
+class DemoSession {
+  static async create(data) {
+    const { demo_id, session_token, container_id, container_port, server_id, agent_command_id } = data;
+    const result = await db.query(
+      `INSERT INTO demo_sessions
+         (demo_id, session_token, container_id, container_port, server_id, agent_command_id, status)
+       VALUES (?, ?, ?, ?, ?, ?, "active")`,
+      [demo_id, session_token, container_id || null, container_port || null,
+       server_id || null, agent_command_id || null]
+    );
+    return result.insertId;
+  }
+
+  static async findByToken(token) {
+    const rows = await db.query('SELECT * FROM demo_sessions WHERE session_token = ?', [token]);
+    return rows[0];
+  }
+
+  static async findById(id) {
+    const rows = await db.query('SELECT * FROM demo_sessions WHERE id = ?', [id]);
+    return rows[0];
+  }
+
+  static async updateActivity(id) {
+    await db.query(
+      'UPDATE demo_sessions SET last_activity = NOW(), last_seen = NOW() WHERE id = ?',
+      [id]
+    );
+  }
+
+  // Presence only: the visitor's page is still polling. Does NOT reset the
+  // inactivity timer, so an open-but-idle tab still expires.
+  static async touch(id) {
+    await db.query(
+      'UPDATE demo_sessions SET last_seen = NOW() WHERE id = ?',
+      [id]
+    );
+  }
+
+  static async updateStatus(id, status) {
+    const updates = { active: 'SET status = ?, last_activity = NOW()', inactive: 'SET status = ?, last_activity = NOW()' };
+    await db.query(`UPDATE demo_sessions ${updates[status] || 'SET status = ?'} WHERE id = ?`, [status, id]);
+  }
+
+  static async end(id) {
+    await db.query(
+      'UPDATE demo_sessions SET status = "stopped", ended_at = NOW() WHERE id = ?',
+      [id]
+    );
+  }
+
+  static async endAllForDemo(demoId) {
+    return db.query(
+      'UPDATE demo_sessions SET status = "stopped", ended_at = NOW() ' +
+      'WHERE demo_id = ? AND status IN ("active", "inactive")',
+      [demoId]
+    );
+  }
+
+  static async updateContainerInfo(id, { container_id, container_port }) {
+    await db.query(
+      'UPDATE demo_sessions SET container_id = ?, container_port = ? WHERE id = ?',
+      [container_id, container_port, id]
+    );
+  }
+
+  static async findActiveByDemoId(demoId) {
+    return db.query(
+      'SELECT * FROM demo_sessions WHERE demo_id = ? AND status IN ("active", "inactive")',
+      [demoId]
+    );
+  }
+
+  static async findExpiredSessions() {
+    return db.query(
+      `SELECT s.*, d.timeout_minutes FROM demo_sessions s 
+       JOIN demos d ON s.demo_id = d.id 
+       WHERE s.status IN ("active", "inactive") 
+       AND s.last_activity < DATE_SUB(NOW(), INTERVAL d.timeout_minutes MINUTE)`
+    );
+  }
+
+  static async countActive() {
+    const rows = await db.query(
+      'SELECT COUNT(*) AS count FROM demo_sessions WHERE status IN ("active", "inactive")'
+    );
+    return rows[0] ? rows[0].count : 0;
+  }
+
+  // Sessions whose page stopped polling (visitor closed the tab). Uses
+  // last_seen, which every presence poll refreshes, so an idle-but-open tab is
+  // not reaped here (it expires via the longer inactivity timeout instead).
+  // Sessions still being set up (no container yet) are exempt: a slow image
+  // build/push must not be killed by the short presence grace.
+  static async findStaleSessions(graceSeconds = 60) {
+    const seconds = Math.max(1, parseInt(graceSeconds, 10) || 60);
+    return db.query(
+      `SELECT * FROM demo_sessions
+       WHERE status IN ("active", "inactive")
+       AND container_id IS NOT NULL
+       AND last_seen < DATE_SUB(NOW(), INTERVAL ${seconds} SECOND)`
+    );
+  }
+
+  static async delete(id) {
+    await db.query('DELETE FROM demo_sessions WHERE id = ?', [id]);
+  }
+}
+
+module.exports = DemoSession;
