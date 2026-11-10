@@ -1,5 +1,4 @@
 
----
 
 ```markdown
 # MindDemo 🚀
@@ -8,7 +7,6 @@
 
 > **Status**: Actief in ontwikkeling · Hoofdbranch: `master`
 
----
 
 ## ✨ Features
 
